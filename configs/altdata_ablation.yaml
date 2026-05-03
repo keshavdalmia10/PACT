@@ -1,0 +1,39 @@
+# Alt-data ablation (spec §6.6) — 5 variants, run within the best 1–2
+# coordination protocols only (cost reasons).
+
+variants:
+  - id: text_only
+    name: "Text-only headline"
+    enable_secondary: []
+    note: "GDELT + EDGAR + FOMC + transcripts + ALFRED"
+  - id: plus_attention
+    name: "+ Attention data"
+    enable_secondary:
+      - wiki_abnormal_attention
+      - wiki_attention_persistence
+      - gtrends_abnormal_level
+      - gtrends_momentum
+  - id: plus_event_probs
+    name: "+ Event probabilities (Window B only)"
+    enable_secondary:
+      - wiki_abnormal_attention
+      - wiki_attention_persistence
+      - gtrends_abnormal_level
+      - gtrends_momentum
+      - polymarket_event_prob
+      - polymarket_prob_change
+    window: window_b
+  - id: plus_instrument
+    name: "+ Instrument-specific (GitHub QQQ, on-chain BTC, NOAA oil)"
+    enable_altdata_in_fundamentals: true
+  - id: full
+    name: "Full alt-data stack"
+    enable_secondary:
+      - wiki_abnormal_attention
+      - wiki_attention_persistence
+      - gtrends_abnormal_level
+      - gtrends_momentum
+      - polymarket_event_prob
+      - polymarket_prob_change
+    enable_altdata_in_fundamentals: true
+    window: window_b

@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Environments / secrets
+.env
+.env.*
+*.pem
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Data caches (raw fetches and LLM responses) — too large / contain API content
+data/cache/store/
+data/cache/llm/
+
+# Notebooks scratch
+.ipynb_checkpoints/
+
+# Backtest artifacts
+results/
+*.parquet
+*.feather

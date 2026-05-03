@@ -1,0 +1,55 @@
+# Headline 7 × 2 ablation matrix (spec §6.2)
+# Each cell runs under both LLM regimes (open-source vs frontier).
+# Cost-budget the frontier path up front (§13 caveat 4).
+
+llm_regimes:
+  - name: open_source
+    primary: chronogpt
+    model: manelalab/chrono-gpt-v1-realtime
+    revision: null   # pin a specific HF commit hash before publishing
+    note: "contamination-clean path"
+  - name: frontier
+    primary: gpt4o
+    model: gpt-4o-2024-11-20
+    note: "post-cutoff sample only; verify cutoff at submission"
+
+protocols:
+  - id: "1"
+    key: single_agent
+    name: "Single-LLM monolith"
+  - id: "2"
+    key: independent_ensemble
+    name: "Independent ensemble (no comm)"
+  - id: "3"
+    key: sequential_pipeline
+    name: "Sequential 3-phase pipeline"
+  - id: "4"
+    key: hierarchical
+    name: "Hierarchical / manager-analyst"
+  - id: "5"
+    key: debate
+    name: "Debate / bull-bear"
+  - id: "6"
+    key: deterministic_only
+    name: "Deterministic anchor only"
+  - id: "7"
+    key: llm_plus_anchor
+    name: "LLM + deterministic anchor"
+
+window_a:           # spec §6.4: full window
+  start: "2010-01-01"
+  end:   "2024-12-31"
+  alt_data: false   # WITHOUT Polymarket
+window_b:           # spec §6.4: modern window
+  start: "2022-01-01"
+  end:   "2024-12-31"
+  alt_data: true    # WITH Polymarket
+
+walk_forward:
+  train_years: 3
+  test_months: 6
+
+backtest:
+  rebalance_freq: "W-FRI"
+  transaction_cost_bps_roundtrip: 30
+  starting_capital: 1_000_000
