@@ -83,14 +83,23 @@ def build_protocol(
     return cls(agents=agents, universe=universe)
 
 
-def build_llm_client(regime: str, offline: bool = False):
-    """Build the LLM client for a regime, or None for `none` regime."""
+def build_llm_client(regime: str, offline: bool = False, cutoff_year: int | None = None):
+    """Build the LLM client for a regime, or None for `none` regime.
+
+    `cutoff_year` only applies to ChronoGPT and selects the contamination-
+    clean yearly checkpoint. Defaults to the latest available checkpoint when
+    not specified. For full contamination cleanliness across a multi-year
+    walk-forward, swap the client per rebalance via
+    `ChronoGPTClient.for_decision_year(year)`.
+    """
     if regime == "none":
         return None
     if regime == "open_source":
         from llm.chronogpt_client import ChronoGPTClient
 
-        return ChronoGPTClient(offline=offline)
+        if cutoff_year is None:
+            return ChronoGPTClient(offline=offline)
+        return ChronoGPTClient(cutoff_year=cutoff_year, offline=offline)
     if regime == "frontier":
         from llm.gpt4o_client import GPT4oClient
 

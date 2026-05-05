@@ -5,9 +5,13 @@
 llm_regimes:
   - name: open_source
     primary: chronogpt
-    model: manelalab/chrono-gpt-v1-realtime
-    revision: null   # pin a specific HF commit hash before publishing
-    note: "contamination-clean path"
+    model_family: manelalab/chrono-gpt-instruct-v1
+    # Yearly dated checkpoints {1999..2024}; commit shas pinned in
+    # llm/chronogpt_revisions.py::INSTRUCT_REVISIONS. For a backtest decision
+    # at date D, use cutoff = year(D) - 1 (contamination-clean per spec §6.1).
+    cutoff_year_default: 2024
+    revisions_module: llm.chronogpt_revisions
+    note: "contamination-clean path; per-year checkpoint with pinned sha"
   - name: frontier
     primary: gpt4o
     model: gpt-4o-2024-11-20
