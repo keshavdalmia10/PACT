@@ -18,6 +18,10 @@ venv/
 .idea/
 .DS_Store
 
+# Logs
+logs/
+*.log
+
 # Test / coverage
 .pytest_cache/
 .coverage
@@ -32,7 +36,11 @@ data/cache/llm/
 # Notebooks scratch
 .ipynb_checkpoints/
 
-# Backtest artifacts
-results/
+# Backtest artifacts (keep dir, ignore contents)
+results/raw/
+results/tables/*.csv
+results/tables/*.md
+results/figures/
+results/matrix_run_*.csv
 *.parquet
 *.feather

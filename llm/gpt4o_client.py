@@ -21,6 +21,9 @@ from llm.base import (
     read_cache,
     write_cache,
 )
+from pact_logging import get_logger
+
+log = get_logger(__name__)
 
 DEFAULT_MODEL = "gpt-4o-2024-11-20"
 
@@ -83,11 +86,13 @@ class GPT4oClient(LLMClient):
             )
 
         if self.offline:
+            log.error("offline cache miss model=%s hash=%s", self.model, h[:12])
             raise KeyError(
                 f"Cache miss in offline mode for prompt hash {h}. "
                 "Run online once to populate cache."
             )
 
+        log.info("gpt4o api call model=%s hash=%s temp=%s seed=%s", self.model, h[:12], temperature, seed)
         client = self._ensure_client()
         api_resp = client.chat.completions.create(
             model=self.model,
@@ -107,4 +112,11 @@ class GPT4oClient(LLMClient):
             "finish_reason": api_resp.choices[0].finish_reason,
         }
         write_cache(self.model, h, canonical, payload)
+        log.info(
+            "gpt4o api ok model=%s hash=%s fingerprint=%s tokens=%s",
+            self.model,
+            h[:12],
+            payload.get("system_fingerprint"),
+            (payload.get("usage") or {}).get("total_tokens"),
+        )
         return LLMResponse(text=text, model=self.model, prompt_hash=h, raw=payload, cached=False)

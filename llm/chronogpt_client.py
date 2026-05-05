@@ -16,6 +16,9 @@ from llm.base import (
     read_cache,
     write_cache,
 )
+from pact_logging import get_logger
+
+log = get_logger(__name__)
 
 DEFAULT_MODEL = "manelalab/chrono-gpt-v1-realtime"
 
@@ -40,6 +43,7 @@ class ChronoGPTClient(LLMClient):
         if self._pipe is None:
             if self.offline:
                 raise RuntimeError("ChronoGPT in offline mode; cache misses will fail.")
+            log.info("chronogpt loading model=%s revision=%s device=%s", self._hf_model, self._revision, self._device)
             from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
             tok = AutoTokenizer.from_pretrained(self._hf_model, revision=self._revision)
@@ -52,6 +56,7 @@ class ChronoGPTClient(LLMClient):
                 tokenizer=tok,
                 device_map=self._device if self._device != "auto" else None,
             )
+            log.info("chronogpt loaded model=%s", self._hf_model)
         return self._pipe
 
     def complete(
@@ -80,8 +85,10 @@ class ChronoGPTClient(LLMClient):
             )
 
         if self.offline:
+            log.error("chronogpt offline cache miss model=%s hash=%s", self.model, h[:12])
             raise KeyError(f"Cache miss in offline mode for prompt hash {h}.")
 
+        log.info("chronogpt generate model=%s hash=%s temp=%s", self.model, h[:12], temperature)
         pipe = self._ensure_pipe()
         prompt = f"<|system|>\n{system}\n<|user|>\n{user}\n<|assistant|>\n"
         gen_kwargs: dict[str, Any] = {

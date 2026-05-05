@@ -2,18 +2,31 @@
 
 Inputs: ALFRED first-release macro series + FOMC text.
 Output: regime quadrant (growth × inflation) + per-instrument view.
+
+Two-stage decide():
+1. Classify regime (growth × inflation) from 3-month deltas of GDP and CPI.
+2. Apply a coarse `_macro_priors` table → anchor views.
+3. If an LLM is available, refine those anchor views; else return the anchor.
 """
 
 from __future__ import annotations
 
-import json
 from datetime import date, timedelta
 
-import numpy as np
 import pandas as pd
 
+from agents._llm_helpers import views_from_llm_or_anchor
 from agents.base_agent import BaseAgent, InstrumentView
 from data.fetchers.alfred import HEADLINE_SERIES, first_release
+
+SYSTEM_PROMPT = (
+    "You are the Macro Regime Agent. Inputs are first-release ALFRED macro "
+    "series (level + 3-month change) and a per-instrument anchor view from a "
+    "growth × inflation regime prior. Refine direction and conviction with the "
+    "macro context. Never invent factors. Output strict JSON: a list of "
+    '{"instrument": SYMBOL, "direction": -1|0|1, "conviction": 0..1, '
+    '"horizon": "1q", "rationale": "<=240 chars cite which series drove it"}.'
+)
 
 
 class MacroRegimeAgent(BaseAgent):
@@ -21,18 +34,15 @@ class MacroRegimeAgent(BaseAgent):
 
     def extract_factors(self, as_of: date) -> dict[str, dict[str, float]]:
         start = as_of - timedelta(days=400)
-        macro = {}
+        macro: dict[str, float] = {}
         for label, sid in HEADLINE_SERIES.items():
             try:
                 s = first_release(sid, start, as_of)
                 macro[label] = float(s.iloc[-1]) if len(s) else float("nan")
-                macro[f"{label}_chg_3m"] = (
-                    float(s.iloc[-1] - s.iloc[-90]) if len(s) > 90 else float("nan")
-                )
+                macro[f"{label}_chg_3m"] = _change_over_days(s, 90)
             except Exception:
                 macro[label] = float("nan")
-
-        # Same regime view applies to every instrument (the LLM differentiates).
+                macro[f"{label}_chg_3m"] = float("nan")
         return {sym: dict(macro) for sym in self.universe}
 
     def decide(
@@ -43,20 +53,38 @@ class MacroRegimeAgent(BaseAgent):
         macro = next(iter(factors_by_instrument.values()), {})
         regime = self._classify_regime(macro)
         prior = _macro_priors(regime)
-        views: list[InstrumentView] = []
+
+        anchor: list[InstrumentView] = []
         for sym, f in factors_by_instrument.items():
             d = prior.get(sym, 0)
-            views.append(
+            anchor.append(
                 InstrumentView(
                     instrument=sym,
                     direction=d,
                     conviction=0.4 if d != 0 else 0.0,
                     horizon="1q",
                     factors={**f, "regime": _regime_to_int(regime)},
-                    rationale=f"Macro regime: {regime}",
+                    rationale=f"regime={regime}; prior table",
                 )
             )
-        return views
+
+        return views_from_llm_or_anchor(
+            self.llm,
+            system_prompt=SYSTEM_PROMPT,
+            user_payload={
+                "as_of": as_of.isoformat(),
+                "regime": regime,
+                "macro": macro,
+                "anchor": [
+                    {"instrument": v.instrument, "direction": v.direction, "conviction": v.conviction}
+                    for v in anchor
+                ],
+            },
+            universe=self.universe,
+            default_horizon="1q",
+            anchor_views=anchor,
+            agent_name=self.name,
+        )
 
     @staticmethod
     def _classify_regime(m: dict[str, float]) -> str:
@@ -68,7 +96,6 @@ class MacroRegimeAgent(BaseAgent):
 
 
 def _macro_priors(regime: str) -> dict[str, int]:
-    # Coarse prior — refined by the LLM in production. Kept conservative.
     table = {
         "growth_up_x_infl_up": {"SPY": 1, "QQQ": 1, "IWM": 1, "GLD": 1, "USO": 1, "IEF": -1, "SHY": -1, "UUP": 0, "EEM": 1, "BTC": 1},
         "growth_up_x_infl_down": {"SPY": 1, "QQQ": 1, "IEF": 1, "GLD": 0, "USO": 0, "UUP": 0, "EEM": 1, "BTC": 1, "SHY": 1, "IWM": 1},
@@ -85,3 +112,21 @@ def _regime_to_int(r: str) -> float:
         "growth_down_x_infl_up": 2.0,
         "growth_down_x_infl_down": 3.0,
     }.get(r, -1.0)
+
+
+def _change_over_days(s: pd.Series, days: int) -> float:
+    """Difference between the latest value and the value ~`days` ago.
+
+    Works for daily/monthly/quarterly series alike — falls back to the
+    earliest available observation when the requested lookback predates the
+    series. Returns NaN only if there are fewer than 2 observations.
+    """
+    if len(s) < 2:
+        return float("nan")
+    idx = pd.to_datetime(s.index)
+    target = idx[-1] - pd.Timedelta(days=days)
+    prior_mask = idx <= target
+    if not prior_mask.any():
+        return float("nan")
+    prior_val = float(s.values[prior_mask][-1])
+    return float(s.iloc[-1] - prior_val)

@@ -17,8 +17,11 @@ from agents.base_agent import InstrumentView
 from coordination.base import CoordinationProtocol
 from data.fetchers.prices import fetch_panel
 from factors.risk import ewma_volatility
+from pact_logging import get_logger
 from portfolio.construction import PortfolioConfig, views_to_target_weights
 from portfolio.risk_overlays import apply_correlation_throttle, apply_drawdown_breaker
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -48,8 +51,13 @@ def run_backtest(
     universe: tuple[str, ...],
     cfg: BacktestConfig,
 ) -> BacktestResult:
+    log.info(
+        "backtest start protocol=%s universe=%d start=%s end=%s capital=%s",
+        protocol.name, len(universe), cfg.start, cfg.end, cfg.starting_capital,
+    )
     prices = fetch_panel(list(universe), cfg.start, cfg.end, field="Adj Close")
     if prices.empty:
+        log.error("backtest aborted: empty price panel")
         raise RuntimeError("price panel is empty; check universe / date range")
 
     rets = prices.pct_change().fillna(0.0)
@@ -70,11 +78,11 @@ def run_backtest(
     for d in rebal_dates:
         ts = pd.Timestamp(d)
         if ts not in prices.index:
-            # snap to next available trading day
-            next_idx = prices.index[prices.index.searchsorted(ts)]
-            if next_idx == prices.index[-1] and next_idx < ts:
+            # snap to next available trading day; skip if past end of panel
+            idx = prices.index.searchsorted(ts)
+            if idx >= len(prices.index):
                 continue
-            ts = next_idx
+            ts = prices.index[idx]
 
         result = protocol.run(ts.date())
         rv = realized_vol.loc[:ts].iloc[-1].dropna().to_dict()
@@ -86,6 +94,8 @@ def run_backtest(
             else 0.0
         )
         if dd_60d <= -0.15:
+            if weeks_since_breach != 0:
+                log.warning("backtest drawdown breaker triggered as_of=%s dd_60d=%.4f", ts.date(), dd_60d)
             weeks_since_breach = 0
         else:
             weeks_since_breach += 1
@@ -110,6 +120,7 @@ def run_backtest(
         gross_delta = sum(abs(d) for d in delta.values())
         if gross_delta > cfg.turnover_cap_per_period:
             scale = cfg.turnover_cap_per_period / gross_delta
+            log.debug("backtest turnover cap as_of=%s gross_delta=%.3f scale=%.3f", ts.date(), gross_delta, scale)
             target = {s: prev_weights[s] + delta[s] * scale for s in universe}
 
         weights_log[ts.date()] = target
@@ -135,6 +146,11 @@ def run_backtest(
     equity = (1 + net).cumprod() * cfg.starting_capital
     turnover = cost_series / cost_bps  # gross traded per rebalance day
 
+    final_equity = float(equity.iloc[-1]) if len(equity) else float("nan")
+    log.info(
+        "backtest done protocol=%s rebalances=%d final_equity=%.2f total_return=%.4f",
+        protocol.name, len(weights_log), final_equity, final_equity / cfg.starting_capital - 1,
+    )
     return BacktestResult(
         equity=equity,
         weights=daily_weights,

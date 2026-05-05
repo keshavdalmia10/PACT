@@ -13,6 +13,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from pact_logging import get_logger
+
+log = get_logger(__name__)
+
 Direction = Literal[-1, 0, 1]
 Horizon = Literal["1w", "1m", "1q"]
 
@@ -78,6 +82,12 @@ class BaseAgent(ABC):
         """Combine factors into views. May call self.llm."""
 
     def run(self, as_of: date) -> AgentDecision:
+        log.debug("agent run name=%s as_of=%s", self.name, as_of)
         factors = self.extract_factors(as_of)
         views = self.decide(as_of, factors)
+        nz = sum(1 for v in views if v.direction != 0)
+        log.info(
+            "agent done name=%s as_of=%s factors=%d views=%d nonzero=%d",
+            self.name, as_of, len(factors), len(views), nz,
+        )
         return AgentDecision(agent_name=self.name, as_of=as_of, views=views)

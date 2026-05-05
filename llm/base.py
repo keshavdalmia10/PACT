@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pact_logging import get_logger
+
+log = get_logger(__name__)
+
 LLM_CACHE_ROOT = Path(__file__).resolve().parent.parent / "data" / "cache" / "llm"
 LLM_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -64,7 +68,9 @@ def cache_path(model: str, h: str) -> Path:
 def read_cache(model: str, h: str) -> dict[str, Any] | None:
     p = cache_path(model, h)
     if not p.exists():
+        log.debug("llm cache miss model=%s hash=%s", model, h[:12])
         return None
+    log.debug("llm cache hit model=%s hash=%s", model, h[:12])
     with p.open() as f:
         return json.load(f)
 
@@ -80,6 +86,7 @@ def write_cache(model: str, h: str, canonical: str, response: dict[str, Any]) ->
     }
     with p.open("w") as f:
         json.dump(record, f, indent=2, ensure_ascii=False)
+    log.debug("llm cache write model=%s hash=%s bytes=%d", model, h[:12], p.stat().st_size)
 
 
 class LLMClient(ABC):

@@ -18,6 +18,9 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from data.cache.cache import read as cache_read
 from data.cache.cache import write as cache_write
+from pact_logging import get_logger
+
+log = get_logger(__name__)
 
 NAMESPACE = "edgar"
 BASE = "https://data.sec.gov"
@@ -49,7 +52,9 @@ def submissions(cik: int) -> dict[str, Any]:
     params = {"cik": cik_str}
     cached = cache_read(NAMESPACE + ".submissions", params)
     if cached is not None:
+        log.debug("edgar cache hit cik=%s", cik_str)
         return cached["payload"]
+    log.info("edgar submissions fetch cik=%s", cik_str)
     url = f"{BASE}/submissions/CIK{cik_str}.json"
     payload = _get(url)
     cache_write(NAMESPACE + ".submissions", params, payload)

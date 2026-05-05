@@ -1,0 +1,99 @@
+"""Shared LLM-call helpers for agents (spec §4.2).
+
+Every LLM-driven agent follows the same pattern:
+1. Build a deterministic anchor view from factors (always works, even with no LLM).
+2. If an LLM is available, ask it to refine/replace the anchor.
+3. If the LLM call fails or returns unparseable output, fall back to the anchor.
+
+`views_from_llm_or_anchor` encapsulates step 2-3 so the agents stay short.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from agents.base_agent import Horizon, InstrumentView
+from pact_logging import get_logger
+
+log = get_logger(__name__)
+
+
+def parse_view_list(
+    text: str,
+    universe: tuple[str, ...],
+    default_horizon: Horizon,
+) -> list[InstrumentView]:
+    """Parse an LLM JSON list into InstrumentViews. Returns [] on failure."""
+    data = _try_load_json(text)
+    if not isinstance(data, list):
+        return []
+    out: list[InstrumentView] = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        entry.setdefault("horizon", default_horizon)
+        try:
+            out.append(InstrumentView(**entry))
+        except Exception:
+            continue
+    return out
+
+
+def _try_load_json(text: str) -> Any:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Try to recover a JSON array embedded in prose.
+    i = text.find("[")
+    j = text.rfind("]")
+    if i >= 0 and j > i:
+        try:
+            return json.loads(text[i : j + 1])
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def views_from_llm_or_anchor(
+    llm,
+    *,
+    system_prompt: str,
+    user_payload: dict,
+    universe: tuple[str, ...],
+    default_horizon: Horizon,
+    anchor_views: list[InstrumentView],
+    agent_name: str = "agent",
+    max_tokens: int = 1500,
+) -> list[InstrumentView]:
+    """Try LLM; on any failure fall back to `anchor_views`.
+
+    Always returns one view per universe symbol — fills missing symbols from
+    the anchor so downstream protocols never see a partial output.
+    """
+    if llm is None:
+        return anchor_views
+    try:
+        resp = llm.complete(
+            system=system_prompt,
+            user=json.dumps(user_payload, default=float),
+            max_tokens=max_tokens,
+        )
+    except Exception as e:
+        log.warning("agent=%s llm.complete failed (%s); falling back to anchor", agent_name, type(e).__name__)
+        return anchor_views
+
+    parsed = parse_view_list(resp.text, universe, default_horizon)
+    if not parsed:
+        log.warning("agent=%s llm output unparseable; falling back to anchor", agent_name)
+        return anchor_views
+
+    seen = {v.instrument for v in parsed}
+    by_anchor = {v.instrument: v for v in anchor_views}
+    for sym in universe:
+        s = sym.upper()
+        if s not in seen and s in by_anchor:
+            parsed.append(by_anchor[s])
+    log.debug("agent=%s llm produced %d views (anchor=%d)", agent_name, len(parsed), len(anchor_views))
+    return parsed

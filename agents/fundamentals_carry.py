@@ -2,22 +2,41 @@
 
 Per-instrument factor families:
 - Equity indices: aggregated P/E, FCF yield, revenue growth (EDGAR 10-K/Q)
-- Bonds: real yields, term premium, slope (ALFRED)
-- Gold: real-yield-vs-gold, USD context
+- Bonds: real yields, term premium, slope (ALFRED) — wired here
+- Gold: real-yield-vs-gold, USD context — wired here
 - Oil: EIA inventories + NOAA weather (HDD, hurricanes)
 - BTC: on-chain (active addresses, exchange flows, MVRV, hashrate)
 - QQQ: GitHub Archive aggregate engineering velocity
 - Earnings transcripts: per-quarter guidance/sentiment
+
+Equity index aggregation across constituents is non-trivial (EDGAR XBRL
+parsing across hundreds of CIKs); kept stubbed at zero. Bond/gold factors
+are wired off ALFRED first-release series and produce non-zero anchor views
+when the LLM is unavailable.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
+from agents._llm_helpers import views_from_llm_or_anchor
 from agents.base_agent import BaseAgent, InstrumentView
+from data.fetchers.alfred import HEADLINE_SERIES, first_release
+from pact_logging import get_logger
+
+log = get_logger(__name__)
 
 EQUITY_INDICES = ("SPY", "QQQ", "IWM", "EEM")
 BONDS = ("IEF", "SHY")
+
+SYSTEM_PROMPT = (
+    "You are the Fundamentals/Carry Agent. Inputs are per-instrument factor "
+    "blobs (real yield, slope, P/E, etc) and a deterministic anchor view. "
+    "Refine the anchor — agree, downgrade, or flip — based on the factors. "
+    "Never invent factors. Horizon is typically 1q. Output strict JSON: a "
+    'list of {"instrument": SYMBOL, "direction": -1|0|1, "conviction": 0..1, '
+    '"horizon": "1q", "rationale": "<=240 chars cite which factor"}.'
+)
 
 
 class FundamentalsCarryAgent(BaseAgent):
@@ -28,10 +47,15 @@ class FundamentalsCarryAgent(BaseAgent):
         self.enable_altdata = enable_altdata
 
     def extract_factors(self, as_of: date) -> dict[str, dict[str, float]]:
+        macro = self._fetch_rates(as_of)
+
         out: dict[str, dict[str, float]] = {}
         for sym in self.universe:
             f: dict[str, float] = {}
             if sym in EQUITY_INDICES:
+                # Equity index aggregation across constituents is not wired
+                # (requires EDGAR XBRL across hundreds of CIKs). Kept at zero
+                # so the schema is visible to the LLM / downstream agents.
                 f.update({
                     "agg_pe": 0.0,
                     "fwd_earnings_yield": 0.0,
@@ -42,9 +66,23 @@ class FundamentalsCarryAgent(BaseAgent):
                 if self.enable_altdata and sym == "QQQ":
                     f["github_eng_velocity_log_abnormal"] = 0.0
             elif sym in BONDS:
-                f.update({"real_yield": 0.0, "term_premium": 0.0, "slope_2s10s": 0.0})
+                # Real yield (10y or 2y minus CPI YoY %), nominal level, slope.
+                if sym == "IEF":
+                    nominal = macro["ten_year"]
+                else:
+                    nominal = macro["two_year"]
+                f.update({
+                    "nominal_yield": nominal,
+                    "real_yield": _real_yield(nominal, macro["cpi_yoy"]),
+                    "slope_2s10s": macro["slope_2s10s"],
+                    "fed_funds": macro["fed_funds"],
+                })
             elif sym == "GLD":
-                f.update({"real_yield_corr": 0.0, "usd_index_z": 0.0})
+                f.update({
+                    "real_yield_10y": _real_yield(macro["ten_year"], macro["cpi_yoy"]),
+                    "fed_funds": macro["fed_funds"],
+                    "cpi_yoy": macro["cpi_yoy"],
+                })
             elif sym == "USO":
                 f.update({"eia_inventory_z": 0.0})
                 if self.enable_altdata:
@@ -57,6 +95,8 @@ class FundamentalsCarryAgent(BaseAgent):
                         "mvrv": 0.0,
                         "hashrate_log_abnormal": 0.0,
                     })
+            elif sym == "UUP":
+                f.update({"fed_funds": macro["fed_funds"], "cpi_yoy": macro["cpi_yoy"]})
             out[sym] = f
         return out
 
@@ -65,14 +105,100 @@ class FundamentalsCarryAgent(BaseAgent):
         as_of: date,
         factors_by_instrument: dict[str, dict[str, float]],
     ) -> list[InstrumentView]:
-        return [
-            InstrumentView(
-                instrument=sym,
-                direction=0,
-                conviction=0.0,
-                horizon="1q",
-                factors=f,
-                rationale="fundamentals/carry: stub view (factor extraction pending)",
-            )
-            for sym, f in factors_by_instrument.items()
+        anchor = [
+            self._anchor_view(sym, f) for sym, f in factors_by_instrument.items()
         ]
+
+        return views_from_llm_or_anchor(
+            self.llm,
+            system_prompt=SYSTEM_PROMPT,
+            user_payload={
+                "as_of": as_of.isoformat(),
+                "factors": factors_by_instrument,
+                "anchor": [
+                    {"instrument": v.instrument, "direction": v.direction, "conviction": v.conviction, "rationale": v.rationale}
+                    for v in anchor
+                ],
+            },
+            universe=self.universe,
+            default_horizon="1q",
+            anchor_views=anchor,
+            agent_name=self.name,
+        )
+
+    @staticmethod
+    def _anchor_view(sym: str, f: dict[str, float]) -> InstrumentView:
+        if sym in BONDS:
+            return _bond_anchor(sym, f)
+        if sym == "GLD":
+            return _gold_anchor(f)
+        return InstrumentView(
+            instrument=sym, direction=0, conviction=0.0, horizon="1q",
+            factors=f, rationale="fundamentals anchor: factors not wired",
+        )
+
+    def _fetch_rates(self, as_of: date) -> dict[str, float]:
+        start = as_of - timedelta(days=400)
+        out: dict[str, float] = {}
+        for label in ("ten_year", "two_year", "fed_funds"):
+            try:
+                s = first_release(HEADLINE_SERIES[label], start, as_of)
+                out[label] = float(s.iloc[-1]) if len(s) else 0.0
+            except Exception as e:
+                log.warning("fundamentals: ALFRED fetch failed series=%s: %s", label, type(e).__name__)
+                out[label] = 0.0
+        # cpi_yoy: CPIAUCSL is the level series; compute YoY % from latest vs ~252 days back.
+        try:
+            cpi = first_release(HEADLINE_SERIES["cpi_yoy"], start, as_of)
+            if len(cpi) >= 2:
+                out["cpi_yoy"] = float((cpi.iloc[-1] / cpi.iloc[0] - 1.0) * 100.0)
+            else:
+                out["cpi_yoy"] = 0.0
+        except Exception as e:
+            log.warning("fundamentals: ALFRED CPI fetch failed: %s", type(e).__name__)
+            out["cpi_yoy"] = 0.0
+        out["slope_2s10s"] = out["ten_year"] - out["two_year"]
+        return out
+
+
+def _real_yield(nominal: float, cpi_yoy_pct: float) -> float:
+    """Real yield ≈ nominal − CPI YoY %. Falls back to nominal when CPI missing."""
+    if cpi_yoy_pct in (0.0, None) or cpi_yoy_pct != cpi_yoy_pct:  # NaN check
+        return nominal
+    return nominal - cpi_yoy_pct
+
+
+def _bond_anchor(sym: str, f: dict[str, float]) -> InstrumentView:
+    """Rising real yields → short bonds; deeply negative real yields → long."""
+    real_yield = f.get("real_yield", 0.0)
+    if real_yield > 1.5:
+        direction, conv = -1, 0.4
+        why = f"real_yield={real_yield:.2f}% > 1.5% → bonds expensive"
+    elif real_yield < -0.5:
+        direction, conv = 1, 0.4
+        why = f"real_yield={real_yield:.2f}% < -0.5% → bonds cheap"
+    else:
+        direction, conv = 0, 0.0
+        why = f"real_yield={real_yield:.2f}% neutral"
+    return InstrumentView(
+        instrument=sym, direction=direction, conviction=conv, horizon="1q",
+        factors=f, rationale=why,
+    )
+
+
+def _gold_anchor(f: dict[str, float]) -> InstrumentView:
+    """Falling real yields → long gold (textbook)."""
+    real_yield = f.get("real_yield_10y", 0.0)
+    if real_yield < 0.5:
+        direction, conv = 1, 0.35
+        why = f"10y real_yield={real_yield:.2f}% low → gold supportive"
+    elif real_yield > 2.0:
+        direction, conv = -1, 0.35
+        why = f"10y real_yield={real_yield:.2f}% high → gold headwind"
+    else:
+        direction, conv = 0, 0.0
+        why = f"10y real_yield={real_yield:.2f}% neutral"
+    return InstrumentView(
+        instrument="GLD", direction=direction, conviction=conv, horizon="1q",
+        factors=f, rationale=why,
+    )
