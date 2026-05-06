@@ -252,8 +252,18 @@ def index_aggregate(
 
     out: dict[str, float] = {"n_constituents": float(n)}
     if total_mcap > 0:
-        out["agg_pe"] = total_mcap / total_ni_ttm if total_ni_ttm > 0 else float("nan")
-        out["fwd_earnings_yield"] = total_ni_ttm / total_mcap if total_ni_ttm else 0.0
+        # Cap-weighted earnings yield: well-defined under any sign of earnings.
+        # Mathematically: sum(NI_i)/sum(MC_i) = Σ w_i · (E_i/P_i) where w_i is
+        # the cap weight. Negative-earner constituents drag yield down naturally.
+        ey = total_ni_ttm / total_mcap
+        out["fwd_earnings_yield"] = ey
+
+        # P/E reported only when the inverse is meaningful — earnings yield
+        # below ~50 bps blows up the inverse and becomes uninformative.
+        # NaN signals "not meaningful" to downstream consumers (treated as 0).
+        EY_FLOOR = 0.005
+        out["agg_pe"] = (1.0 / ey) if ey > EY_FLOOR else float("nan")
+
         out["fcf_yield"] = total_fcf_ttm / total_mcap if total_fcf_ttm else 0.0
     if total_rev_prior > 0:
         out["rev_growth_yoy"] = (total_rev_ttm / total_rev_prior - 1.0)

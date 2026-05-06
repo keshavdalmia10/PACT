@@ -3,7 +3,7 @@
   "note": "Top-30 MSCI Emerging Markets ADRs that file with SEC (EDGAR coverage). Many EM constituents are foreign filers without companyfacts — those return None and are skipped, which biases the aggregate toward US-listed ADRs.",
   "constituents": [
     "TSM", "BABA", "NIO", "PDD", "INFY",
-    "SE", "WIT", "VALE", "ITUB", "BABA",
+    "SE", "WIT", "VALE", "ITUB", "TCEHY",
     "BBD", "VIPS", "JD", "BIDU", "NTES",
     "TME", "GRAB", "YUMC", "BILI", "TAL",
     "GDS", "RDY", "HDB", "IBN", "SBSW",

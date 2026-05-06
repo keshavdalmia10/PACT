@@ -1,12 +1,5 @@
 {
   "as_of": "2025-12-31",
-  "note": "Top-30 Russell 2000 holdings as of late 2025. The Russell 2000 has 2000 names with annual rebalances; tracking the full membership history is itself a research project. This subset captures ~5% of index weight; aggregate fundamentals computed here will be a noisy estimate, not a precise market-cap-weighted average.",
-  "constituents": [
-    "SMCI", "MSTR", "FTAI", "FN", "MLI",
-    "RDNT", "INSM", "JXN", "AIT", "FIX",
-    "EME", "ATR", "ESI", "ITRI", "BMI",
-    "FUL", "CRS", "IDA", "MTH", "CHX",
-    "BCC", "BRBR", "SFM", "PVH", "NSIT",
-    "AVAV", "VRRM", "ENS", "AMR", "FCFS"
-  ]
+  "note": "Russell 2000 has 2000 names with annual rebalances. A reliable cap-weighted aggregate requires ~200+ constituents to cover meaningful index weight. agents/fundamentals_carry.py deliberately excludes IWM from the EDGAR XBRL aggregation path (see EQUITY_INDICES_AGGREGATABLE) so the equity-fundamentals factors stay at zero rather than serve a 5%-coverage signal that the LLM would over-weight.",
+  "constituents": []
 }

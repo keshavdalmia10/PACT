@@ -36,6 +36,13 @@ from pact_logging import get_logger
 log = get_logger(__name__)
 
 EQUITY_INDICES = ("SPY", "QQQ", "IWM", "EEM")
+# Subset for which the EDGAR XBRL aggregation produces a credible signal.
+# IWM (Russell 2000) is excluded: 30-name constituent list covers only ~5%
+# of index weight, making the aggregate unreliable. SPY/QQQ/EEM are
+# credible enough — the cap-weighted earnings-yield aggregation in
+# edgar_aggregates.py handles loss-making constituents (common in EEM)
+# without blowing up the inverse-P/E ratio.
+EQUITY_INDICES_AGGREGATABLE = ("SPY", "QQQ", "EEM")
 BONDS = ("IEF", "SHY")
 
 SYSTEM_PROMPT = (
@@ -77,14 +84,20 @@ class FundamentalsCarryAgent(BaseAgent):
                 # Equity-index fundamentals via SEC companyfacts XBRL aggregation
                 # (data/fetchers/edgar_aggregates.py). Cached per (symbol, as_of)
                 # so per-rebalance lookups are fast after first compute.
-                try:
-                    agg = index_pe_yoy(sym, as_of)
-                    f["agg_pe"] = float(agg.get("agg_pe", 0.0)) if pd.notna(agg.get("agg_pe", 0.0)) else 0.0
-                    f["fwd_earnings_yield"] = float(agg.get("fwd_earnings_yield", 0.0))
-                    f["rev_growth_yoy"] = float(agg.get("rev_growth_yoy", 0.0))
-                    f["fcf_yield"] = float(agg.get("fcf_yield", 0.0))
-                except Exception as e:
-                    log.warning("edgar aggregate failed sym=%s: %s", sym, type(e).__name__)
+                # IWM is excluded — see EQUITY_INDICES_AGGREGATABLE.
+                if sym in EQUITY_INDICES_AGGREGATABLE:
+                    try:
+                        agg = index_pe_yoy(sym, as_of)
+                        f["agg_pe"] = float(agg.get("agg_pe", 0.0)) if pd.notna(agg.get("agg_pe", 0.0)) else 0.0
+                        f["fwd_earnings_yield"] = float(agg.get("fwd_earnings_yield", 0.0))
+                        f["rev_growth_yoy"] = float(agg.get("rev_growth_yoy", 0.0))
+                        f["fcf_yield"] = float(agg.get("fcf_yield", 0.0))
+                    except Exception as e:
+                        log.warning("edgar aggregate failed sym=%s: %s", sym, type(e).__name__)
+                        f.update({"agg_pe": 0.0, "fwd_earnings_yield": 0.0, "rev_growth_yoy": 0.0, "fcf_yield": 0.0})
+                else:
+                    # IWM: equity-fundamentals branch deliberately zeroed
+                    # (Russell 2000 needs a 200+ name aggregate to be credible).
                     f.update({"agg_pe": 0.0, "fwd_earnings_yield": 0.0, "rev_growth_yoy": 0.0, "fcf_yield": 0.0})
                 f["transcript_guidance_score"] = 0.0  # not yet wired
                 if self.enable_altdata and sym == "QQQ":
