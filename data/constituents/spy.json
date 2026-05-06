@@ -1,0 +1,16 @@
+{
+  "as_of": "2025-12-31",
+  "note": "Top-50 S&P 500 holdings by index weight as of late 2025. Applied historically — introduces survivorship bias documented in the paper. Update by replacing this file.",
+  "constituents": [
+    "AAPL", "MSFT", "NVDA", "AMZN", "META",
+    "GOOGL", "GOOG", "BRK-B", "AVGO", "TSLA",
+    "LLY", "JPM", "V", "UNH", "XOM",
+    "MA", "JNJ", "COST", "HD", "PG",
+    "ABBV", "WMT", "NFLX", "BAC", "CVX",
+    "ORCL", "KO", "MRK", "ADBE", "PEP",
+    "AMD", "CRM", "WFC", "TMO", "LIN",
+    "ACN", "CSCO", "ABT", "MCD", "DIS",
+    "PM", "AXP", "DHR", "GE", "VZ",
+    "NEE", "TXN", "INTU", "IBM", "QCOM"
+  ]
+}

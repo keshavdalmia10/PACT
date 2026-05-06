@@ -25,6 +25,9 @@ import pandas as pd
 from agents._llm_helpers import views_from_llm_or_anchor
 from agents.base_agent import BaseAgent, InstrumentView
 from data.fetchers.alfred import HEADLINE_SERIES, first_release, prefetch_window
+from data.fetchers.blockchain_info import fetch_panel as btc_panel
+from data.fetchers.blockchain_info import mvrv_proxy as btc_mvrv_proxy
+from data.fetchers.edgar_aggregates import index_pe_yoy
 from data.fetchers.eia import crude_oil_inventory_us
 from data.fetchers.github_archive import qqq_engineering_velocity
 from data.fetchers.noaa import heating_degree_days_us, named_storms_active
@@ -62,6 +65,7 @@ class FundamentalsCarryAgent(BaseAgent):
         self._hdd: pd.Series | None = None
         self._storms: pd.Series | None = None
         self._gh_velocity: pd.Series | None = None
+        self._btc_panel: pd.DataFrame | None = None
 
     def extract_factors(self, as_of: date) -> dict[str, dict[str, float]]:
         macro = self._fetch_rates(as_of)
@@ -70,16 +74,19 @@ class FundamentalsCarryAgent(BaseAgent):
         for sym in self.universe:
             f: dict[str, float] = {}
             if sym in EQUITY_INDICES:
-                # Equity index aggregation across constituents is not wired
-                # (requires EDGAR XBRL across hundreds of CIKs). Kept at zero
-                # so the schema is visible to the LLM / downstream agents.
-                f.update({
-                    "agg_pe": 0.0,
-                    "fwd_earnings_yield": 0.0,
-                    "rev_growth_yoy": 0.0,
-                    "fcf_yield": 0.0,
-                    "transcript_guidance_score": 0.0,
-                })
+                # Equity-index fundamentals via SEC companyfacts XBRL aggregation
+                # (data/fetchers/edgar_aggregates.py). Cached per (symbol, as_of)
+                # so per-rebalance lookups are fast after first compute.
+                try:
+                    agg = index_pe_yoy(sym, as_of)
+                    f["agg_pe"] = float(agg.get("agg_pe", 0.0)) if pd.notna(agg.get("agg_pe", 0.0)) else 0.0
+                    f["fwd_earnings_yield"] = float(agg.get("fwd_earnings_yield", 0.0))
+                    f["rev_growth_yoy"] = float(agg.get("rev_growth_yoy", 0.0))
+                    f["fcf_yield"] = float(agg.get("fcf_yield", 0.0))
+                except Exception as e:
+                    log.warning("edgar aggregate failed sym=%s: %s", sym, type(e).__name__)
+                    f.update({"agg_pe": 0.0, "fwd_earnings_yield": 0.0, "rev_growth_yoy": 0.0, "fcf_yield": 0.0})
+                f["transcript_guidance_score"] = 0.0  # not yet wired
                 if self.enable_altdata and sym == "QQQ":
                     f["github_eng_velocity_log_abnormal"] = self._qqq_eng_velocity_z(as_of)
             elif sym in BONDS:
@@ -107,12 +114,7 @@ class FundamentalsCarryAgent(BaseAgent):
                     f["hurricane_active"] = self._hurricane_active(as_of)
             elif sym == "BTC":
                 if self.enable_altdata:
-                    f.update({
-                        "active_addresses_log_abnormal": 0.0,
-                        "exchange_netflow_z": 0.0,
-                        "mvrv": 0.0,
-                        "hashrate_log_abnormal": 0.0,
-                    })
+                    f.update(self._btc_factors(as_of))
             elif sym == "UUP":
                 f.update({"fed_funds": macro["fed_funds"], "cpi_yoy": macro["cpi_yoy"]})
             out[sym] = f
@@ -193,6 +195,56 @@ class FundamentalsCarryAgent(BaseAgent):
             return 0.0
         pit = s.loc[s.index <= pd.Timestamp(as_of)]
         return float(pit.iloc[-1]) if not pit.empty else 0.0
+
+    def _btc_factors(self, as_of: date) -> dict[str, float]:
+        """BTC on-chain factors derived from blockchain.info chart series.
+
+        Returns active-addresses log-abnormal, hashrate log-abnormal,
+        transaction-volume z (proxy for exchange netflow), and an MVRV
+        proxy (price/200d MA). All standardized over a trailing window
+        relative to `as_of` for point-in-time hygiene.
+        """
+        if self._btc_panel is None:
+            try:
+                start = (self.cell_window[0] if self.cell_window else as_of) - timedelta(days=400)
+                end = self.cell_window[1] if self.cell_window else as_of
+                self._btc_panel = btc_panel(start, end)
+            except Exception as e:
+                log.warning("blockchain_info fetch failed: %s", type(e).__name__)
+                self._btc_panel = pd.DataFrame()
+
+        f = {
+            "active_addresses_log_abnormal": 0.0,
+            "exchange_netflow_z": 0.0,
+            "mvrv": 0.0,
+            "hashrate_log_abnormal": 0.0,
+        }
+        if self._btc_panel is None or self._btc_panel.empty:
+            return f
+        as_of_ts = pd.Timestamp(as_of)
+        pit = self._btc_panel.loc[self._btc_panel.index <= as_of_ts]
+        if len(pit) < 90:
+            return f
+
+        def _log_abnormal(s: pd.Series) -> float:
+            tail = np.log1p(s.tail(90))
+            if len(tail) < 30 or tail.std() == 0:
+                return 0.0
+            return float((tail.iloc[-1] - tail.iloc[:-7].mean()) / tail.iloc[:-7].std())
+
+        if "active_addresses" in pit.columns:
+            f["active_addresses_log_abnormal"] = _log_abnormal(pit["active_addresses"])
+        if "hash_rate" in pit.columns:
+            f["hashrate_log_abnormal"] = _log_abnormal(pit["hash_rate"])
+        if "transactions" in pit.columns:
+            tx = pit["transactions"].tail(90)
+            mu, sd = float(tx.mean()), float(tx.std())
+            f["exchange_netflow_z"] = (float(tx.iloc[-1]) - mu) / sd if sd > 0 else 0.0
+        if "market_price_usd" in pit.columns:
+            mvrv = btc_mvrv_proxy(pit["market_price_usd"], window=200)
+            if not mvrv.empty and pd.notna(mvrv.iloc[-1]):
+                f["mvrv"] = float(mvrv.iloc[-1])
+        return f
 
     def _qqq_eng_velocity_z(self, as_of: date) -> float:
         """Z-score of trailing-7d GitHub event volume vs trailing 90d, log-scaled."""

@@ -1,0 +1,12 @@
+{
+  "as_of": "2025-12-31",
+  "note": "Top-30 NASDAQ-100 holdings. Applied historically.",
+  "constituents": [
+    "AAPL", "MSFT", "NVDA", "AMZN", "META",
+    "GOOGL", "GOOG", "AVGO", "TSLA", "COST",
+    "NFLX", "ADBE", "PEP", "AMD", "CSCO",
+    "TMUS", "INTU", "AMGN", "QCOM", "TXN",
+    "BKNG", "HON", "AMAT", "ISRG", "CMCSA",
+    "VRTX", "MU", "ADP", "ADI", "LRCX"
+  ]
+}
