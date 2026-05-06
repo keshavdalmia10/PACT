@@ -17,7 +17,7 @@ import pandas as pd
 
 from agents._llm_helpers import views_from_llm_or_anchor
 from agents.base_agent import BaseAgent, InstrumentView
-from data.fetchers.alfred import HEADLINE_SERIES, first_release
+from data.fetchers.alfred import HEADLINE_SERIES, first_release, prefetch_window
 
 SYSTEM_PROMPT = (
     "You are the Macro Regime Agent. Inputs are first-release ALFRED macro "
@@ -32,7 +32,24 @@ SYSTEM_PROMPT = (
 class MacroRegimeAgent(BaseAgent):
     name = "macro_regime"
 
+    def __init__(
+        self,
+        llm_client,
+        universe: tuple[str, ...],
+        cell_window: tuple[date, date] | None = None,
+    ):
+        super().__init__(llm_client, universe)
+        self.cell_window = cell_window
+        self._prefetched = False
+
     def extract_factors(self, as_of: date) -> dict[str, dict[str, float]]:
+        if self.cell_window and not self._prefetched:
+            # Prime ALFRED cache with the full cell window — eliminates per-rebalance
+            # network calls for every HEADLINE series.
+            cell_start = self.cell_window[0] - timedelta(days=400)
+            cell_end = self.cell_window[1]
+            prefetch_window(HEADLINE_SERIES.values(), cell_start, cell_end)
+            self._prefetched = True
         start = as_of - timedelta(days=400)
         macro: dict[str, float] = {}
         for label, sid in HEADLINE_SERIES.items():

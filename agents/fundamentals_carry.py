@@ -24,8 +24,10 @@ import pandas as pd
 
 from agents._llm_helpers import views_from_llm_or_anchor
 from agents.base_agent import BaseAgent, InstrumentView
-from data.fetchers.alfred import HEADLINE_SERIES, first_release
+from data.fetchers.alfred import HEADLINE_SERIES, first_release, prefetch_window
 from data.fetchers.eia import crude_oil_inventory_us
+from data.fetchers.github_archive import qqq_engineering_velocity
+from data.fetchers.noaa import heating_degree_days_us, named_storms_active
 from pact_logging import get_logger
 
 log = get_logger(__name__)
@@ -57,6 +59,9 @@ class FundamentalsCarryAgent(BaseAgent):
         self.enable_altdata = enable_altdata
         self.cell_window = cell_window
         self._crude_inv: pd.Series | None = None
+        self._hdd: pd.Series | None = None
+        self._storms: pd.Series | None = None
+        self._gh_velocity: pd.Series | None = None
 
     def extract_factors(self, as_of: date) -> dict[str, dict[str, float]]:
         macro = self._fetch_rates(as_of)
@@ -76,7 +81,7 @@ class FundamentalsCarryAgent(BaseAgent):
                     "transcript_guidance_score": 0.0,
                 })
                 if self.enable_altdata and sym == "QQQ":
-                    f["github_eng_velocity_log_abnormal"] = 0.0
+                    f["github_eng_velocity_log_abnormal"] = self._qqq_eng_velocity_z(as_of)
             elif sym in BONDS:
                 # Real yield (10y or 2y minus CPI YoY %), nominal level, slope.
                 if sym == "IEF":
@@ -98,7 +103,8 @@ class FundamentalsCarryAgent(BaseAgent):
             elif sym == "USO":
                 f["eia_inventory_z"] = self._uso_inventory_z(as_of)
                 if self.enable_altdata:
-                    f.update({"noaa_hdd_z": 0.0, "hurricane_active": 0.0})
+                    f["noaa_hdd_z"] = self._hdd_z(as_of)
+                    f["hurricane_active"] = self._hurricane_active(as_of)
             elif sym == "BTC":
                 if self.enable_altdata:
                     f.update({
@@ -151,6 +157,66 @@ class FundamentalsCarryAgent(BaseAgent):
             factors=f, rationale="fundamentals anchor: factors not wired",
         )
 
+    def _hdd_z(self, as_of: date) -> float:
+        """Z-score of latest monthly HDD vs trailing 36-month mean."""
+        if self._hdd is None:
+            try:
+                start = (self.cell_window[0] if self.cell_window else as_of) - timedelta(days=400)
+                end = self.cell_window[1] if self.cell_window else as_of
+                self._hdd = heating_degree_days_us(start, end)
+            except Exception as e:
+                log.warning("noaa hdd fetch failed: %s", type(e).__name__)
+                self._hdd = pd.Series(dtype=float)
+        s = self._hdd
+        if s is None or len(s) < 12:
+            return 0.0
+        pit = s.loc[s.index <= pd.Timestamp(as_of)]
+        if len(pit) < 12:
+            return 0.0
+        latest = float(pit.iloc[-1])
+        trailing = pit.iloc[-min(36, len(pit)):]
+        mu, sd = float(trailing.mean()), float(trailing.std())
+        return (latest - mu) / sd if sd > 0 else 0.0
+
+    def _hurricane_active(self, as_of: date) -> float:
+        """Indicator: is `as_of` inside Atlantic hurricane season + a named storm active?"""
+        if self._storms is None:
+            try:
+                start = (self.cell_window[0] if self.cell_window else as_of) - timedelta(days=60)
+                end = self.cell_window[1] if self.cell_window else as_of
+                self._storms = named_storms_active(start, end)
+            except Exception as e:
+                log.warning("noaa storms fetch failed: %s", type(e).__name__)
+                self._storms = pd.Series(dtype=float)
+        s = self._storms
+        if s is None or s.empty:
+            return 0.0
+        pit = s.loc[s.index <= pd.Timestamp(as_of)]
+        return float(pit.iloc[-1]) if not pit.empty else 0.0
+
+    def _qqq_eng_velocity_z(self, as_of: date) -> float:
+        """Z-score of trailing-7d GitHub event volume vs trailing 90d, log-scaled."""
+        if self._gh_velocity is None:
+            try:
+                start = (self.cell_window[0] if self.cell_window else as_of) - timedelta(days=120)
+                end = self.cell_window[1] if self.cell_window else as_of
+                self._gh_velocity = qqq_engineering_velocity(start, end)
+            except Exception as e:
+                log.warning("github_archive fetch failed: %s", type(e).__name__)
+                self._gh_velocity = pd.Series(dtype=float)
+        s = self._gh_velocity
+        if s is None or len(s) < 30:
+            return 0.0
+        pit = s.loc[s.index <= pd.Timestamp(as_of)]
+        if len(pit) < 30:
+            return 0.0
+        recent = float(np.log1p(pit.tail(7).sum()))
+        prior = np.log1p(pit.iloc[-90:-7].rolling(7).sum().dropna())
+        if len(prior) < 5:
+            return 0.0
+        mu, sd = float(prior.mean()), float(prior.std())
+        return (recent - mu) / sd if sd > 0 else 0.0
+
     def _uso_inventory_z(self, as_of: date) -> float:
         """Z-score of latest weekly U.S. crude inventory vs trailing 52-week mean.
 
@@ -193,6 +259,14 @@ class FundamentalsCarryAgent(BaseAgent):
         return (latest - mu) / sd
 
     def _fetch_rates(self, as_of: date) -> dict[str, float]:
+        if self.cell_window and not getattr(self, "_alfred_prefetched", False):
+            cell_start = self.cell_window[0] - timedelta(days=400)
+            cell_end = self.cell_window[1]
+            prefetch_window(
+                ("DGS10", "DGS2", "DFEDTARU", "CPIAUCSL"),
+                cell_start, cell_end,
+            )
+            self._alfred_prefetched = True
         start = as_of - timedelta(days=400)
         out: dict[str, float] = {}
         for label in ("ten_year", "two_year", "fed_funds"):

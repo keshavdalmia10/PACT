@@ -22,6 +22,9 @@ import pandas as pd
 from agents._llm_helpers import views_from_llm_or_anchor
 from agents.base_agent import BaseAgent, InstrumentView
 from data.fetchers.gdelt import GDELT_V2_START, fetch_panel as gdelt_panel
+from data.fetchers.google_trends import search_interest_for_instrument
+from data.fetchers.polymarket import POLYMARKET_START, event_prob_panel
+from data.fetchers.wikipedia import pageviews_for_instrument
 from pact_logging import get_logger
 
 log = get_logger(__name__)
@@ -75,6 +78,9 @@ class NarrativeEventAgent(BaseAgent):
         self.cell_window = cell_window
         self.gdelt_lookback_days = gdelt_lookback_days
         self._gdelt_panel: pd.DataFrame | None = None
+        self._wiki_panel: dict[str, pd.Series] | None = None
+        self._gtrends_panel: dict[str, pd.Series] | None = None
+        self._polymarket_panel: pd.DataFrame | None = None
 
     def _ensure_gdelt_panel(self, as_of: date) -> pd.DataFrame | None:
         """Fetch GDELT daily panel covering the cell window (or `as_of`-only fallback).
@@ -122,6 +128,9 @@ class NarrativeEventAgent(BaseAgent):
 
     def extract_factors(self, as_of: date) -> dict[str, dict[str, float]]:
         panel = self._ensure_gdelt_panel(as_of)
+        wiki = self._ensure_secondary("wikipedia") if self._secondary_active("wiki_") else None
+        gtrends = self._ensure_secondary("gtrends") if self._secondary_active("gtrends_") else None
+        polymarket = self._ensure_secondary("polymarket") if self._secondary_active("polymarket_") else None
         as_of_ts = pd.Timestamp(as_of)
 
         out: dict[str, dict[str, float]] = {}
@@ -131,11 +140,11 @@ class NarrativeEventAgent(BaseAgent):
                 if k in self.enabled_secondary:
                     f[k] = 0.0
 
+            # GDELT primary
             if panel is not None and not panel.empty:
                 n_col = f"n_{sym}"
                 tone_col = f"tone_{sym}"
                 if n_col in panel.columns:
-                    # Point-in-time slice: only rows up to as_of.
                     pit = panel.loc[panel.index <= as_of_ts]
                     if len(pit) >= 7:
                         recent_7d = pit.tail(7)
@@ -143,18 +152,99 @@ class NarrativeEventAgent(BaseAgent):
                         tone_recent = float(recent_7d[tone_col].mean()) if tone_col in pit.columns else 0.0
                         f["gdelt_event_volume_log"] = float(np.log1p(n_recent))
                         f["gdelt_tone"] = tone_recent if pd.notna(tone_recent) else 0.0
-                        # Week-over-week surprise: tone_recent vs prior 4-week mean.
                         if len(pit) >= 35:
                             prior = pit.iloc[-35:-7]
                             prior_tone = float(prior[tone_col].mean()) if tone_col in prior.columns else 0.0
                             prior_std = float(prior[tone_col].std()) if tone_col in prior.columns else 0.0
                             if prior_std > 0:
                                 f["gdelt_tone_surprise_wow"] = (tone_recent - prior_tone) / prior_std
-                            else:
-                                f["gdelt_tone_surprise_wow"] = 0.0
                         f["gdelt_theme_intensity"] = float(np.log1p(n_recent))
+
+            # Wikipedia secondary
+            if wiki and "wiki_abnormal_attention" in self.enabled_secondary:
+                s = wiki.get(sym)
+                if s is not None and not s.empty:
+                    pit = s.loc[s.index <= as_of_ts]
+                    if len(pit) >= 30:
+                        recent = pit.tail(7).mean()
+                        prior = pit.iloc[-30:-7]
+                        mu, sd = float(prior.mean()), float(prior.std())
+                        if sd > 0:
+                            f["wiki_abnormal_attention"] = (recent - mu) / sd
+                        if "wiki_attention_persistence" in self.enabled_secondary:
+                            f["wiki_attention_persistence"] = float(pit.tail(28).autocorr(lag=1) or 0.0)
+
+            # Google Trends secondary
+            if gtrends and "gtrends_abnormal_level" in self.enabled_secondary:
+                s = gtrends.get(sym)
+                if s is not None and not s.empty:
+                    pit = s.loc[s.index <= as_of_ts]
+                    if len(pit) >= 13:
+                        recent = float(pit.tail(2).mean())
+                        prior = pit.iloc[-13:-2]
+                        mu, sd = float(prior.mean()), float(prior.std())
+                        if sd > 0:
+                            f["gtrends_abnormal_level"] = (recent - mu) / sd
+                        if "gtrends_momentum" in self.enabled_secondary and len(pit) >= 4:
+                            f["gtrends_momentum"] = float(pit.iloc[-1] - pit.iloc[-4])
+
+            # Polymarket secondary (Window B only)
+            if polymarket is not None and not polymarket.empty and "polymarket_event_prob" in self.enabled_secondary:
+                if sym in polymarket.columns:
+                    pit = polymarket[sym].loc[polymarket.index <= as_of_ts].dropna()
+                    if not pit.empty:
+                        f["polymarket_event_prob"] = float(pit.iloc[-1])
+                        if "polymarket_prob_change" in self.enabled_secondary and len(pit) >= 7:
+                            f["polymarket_prob_change"] = float(pit.iloc[-1] - pit.iloc[-7])
             out[sym] = f
         return out
+
+    def _secondary_active(self, prefix: str) -> bool:
+        return any(k.startswith(prefix) for k in self.enabled_secondary)
+
+    def _ensure_secondary(self, source: str):
+        """Lazily fetch + cache a secondary panel for the cell window."""
+        if not self.cell_window:
+            return None
+        start = self.cell_window[0] - timedelta(days=60)
+        end = self.cell_window[1]
+
+        if source == "wikipedia":
+            if self._wiki_panel is None:
+                self._wiki_panel = {}
+                for sym in self.universe:
+                    try:
+                        self._wiki_panel[sym] = pageviews_for_instrument(sym, start, end)
+                    except Exception as e:
+                        log.warning("wikipedia fetch failed sym=%s: %s", sym, type(e).__name__)
+                        self._wiki_panel[sym] = pd.Series(dtype=float)
+            return self._wiki_panel
+
+        if source == "gtrends":
+            if self._gtrends_panel is None:
+                self._gtrends_panel = {}
+                for sym in self.universe:
+                    try:
+                        self._gtrends_panel[sym] = search_interest_for_instrument(sym, start, end)
+                    except Exception as e:
+                        log.warning("gtrends fetch failed sym=%s: %s", sym, type(e).__name__)
+                        self._gtrends_panel[sym] = pd.Series(dtype=float)
+            return self._gtrends_panel
+
+        if source == "polymarket":
+            # Window B only; spec §6.4.
+            if self.cell_window[1] < POLYMARKET_START:
+                self._polymarket_panel = pd.DataFrame()
+                return self._polymarket_panel
+            if self._polymarket_panel is None:
+                pm_start = max(start, POLYMARKET_START)
+                try:
+                    self._polymarket_panel = event_prob_panel(self.universe, pm_start, end)
+                except Exception as e:
+                    log.warning("polymarket fetch failed: %s", type(e).__name__)
+                    self._polymarket_panel = pd.DataFrame()
+            return self._polymarket_panel
+        return None
 
     def decide(
         self,

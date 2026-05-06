@@ -69,19 +69,12 @@ class SingleAgentProtocol(CoordinationProtocol):
 
 
 def _safe_parse_views(text: str, universe: tuple[str, ...]) -> list[InstrumentView]:
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return [
-            InstrumentView(instrument=s, direction=0, conviction=0.0, horizon="1w")
-            for s in universe
-        ]
-    out: list[InstrumentView] = []
-    for entry in data:
-        try:
-            out.append(InstrumentView(**entry))
-        except Exception:
-            continue
+    """Parse the LLM's JSON view list. Tolerates markdown code fences
+    (```json...```) and prose around the JSON via the shared helper.
+    Falls back to zero-views on parse failure."""
+    from agents._llm_helpers import parse_view_list
+
+    out = parse_view_list(text, universe, default_horizon="1w")
     seen = {v.instrument for v in out}
     for s in universe:
         if s not in seen:

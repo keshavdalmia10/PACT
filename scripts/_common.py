@@ -73,7 +73,7 @@ def build_agents(
     schemas in narrative_event (no-op until per-source fetchers exist).
     """
     return {
-        "macro_regime": MacroRegimeAgent(llm_client, universe),
+        "macro_regime": MacroRegimeAgent(llm_client, universe, cell_window=cell_window),
         "narrative_event": NarrativeEventAgent(
             llm_client, universe,
             enable_secondary=enable_secondary,
