@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone  # noqa: F401  (re-exported)
 from pathlib import Path
 
 import pandas as pd
@@ -53,18 +53,39 @@ def load_config(name: str) -> dict:
 _PROTOCOLS_NEEDING_LLM = {"single_agent", "debate", "llm_plus_anchor"}
 
 
-def build_agents(llm_client, universe: tuple[str, ...]) -> dict[str, object]:
+def build_agents(
+    llm_client,
+    universe: tuple[str, ...],
+    *,
+    cell_window: tuple[date, date] | None = None,
+    enable_altdata: bool = False,
+    enable_secondary: tuple[str, ...] = (),
+) -> dict[str, object]:
     """Instantiate the full 7-agent set keyed by spec name.
 
     Risk agent does not take directional views (spec §4.7) but is still
     constructed so protocols that rely on it for scaling have access.
+
+    `cell_window` enables single-fetch GDELT/EIA panels covering the entire
+    backtest window (point-in-time slicing per rebalance from local cache).
+    `enable_altdata` activates EIA + alt-data factors in fundamentals_carry.
+    `enable_secondary` activates Wikipedia/Google Trends/Polymarket factor
+    schemas in narrative_event (no-op until per-source fetchers exist).
     """
     return {
         "macro_regime": MacroRegimeAgent(llm_client, universe),
-        "narrative_event": NarrativeEventAgent(llm_client, universe),
+        "narrative_event": NarrativeEventAgent(
+            llm_client, universe,
+            enable_secondary=enable_secondary,
+            cell_window=cell_window,
+        ),
         "cross_asset_transmission": CrossAssetTransmissionAgent(llm_client, universe),
         "technical_trend": TechnicalTrendAgent(llm_client, universe),
-        "fundamentals_carry": FundamentalsCarryAgent(llm_client, universe),
+        "fundamentals_carry": FundamentalsCarryAgent(
+            llm_client, universe,
+            enable_altdata=enable_altdata,
+            cell_window=cell_window,
+        ),
         "risk_correlation": RiskCorrelationAgent(llm_client, universe),
         "portfolio_manager": PortfolioManagerAgent(llm_client, universe),
     }

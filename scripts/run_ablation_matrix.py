@@ -67,14 +67,19 @@ def run_cell(
     universe: tuple[str, ...],
     bt_cfg: BacktestConfig,
     offline: bool,
+    enable_altdata: bool = False,
 ) -> Path:
     """Run one ablation cell and persist its artifacts. Returns its output dir."""
     cid = cell_id(window, regime, protocol_key)
     out = cell_dir(window, regime, protocol_key)
-    log.info("cell start id=%s start=%s end=%s n=%d", cid, start, end, len(universe))
+    log.info("cell start id=%s start=%s end=%s n=%d altdata=%s", cid, start, end, len(universe), enable_altdata)
 
     llm = build_llm_client(regime, offline=offline)
-    agents = build_agents(llm, universe)
+    agents = build_agents(
+        llm, universe,
+        cell_window=(start, end),
+        enable_altdata=enable_altdata,
+    )
     proto = build_protocol(protocol_key, agents, llm, universe)
 
     result = run_backtest(proto, universe, bt_cfg)
@@ -106,6 +111,7 @@ def main() -> None:
     p.add_argument("--quick", action="store_true", help="1y window, 5 ETFs, regime=none — sanity check")
     p.add_argument("--offline-llm", action="store_true", help="LLM clients run in cache-only mode")
     p.add_argument("--universe", nargs="*", default=None, help="override universe (e.g. SPY QQQ IWM)")
+    p.add_argument("--altdata", action="store_true", help="enable alt-data factors (GDELT, EIA, etc.)")
     args = p.parse_args()
 
     cfg = load_config("ablation_matrix.yaml")
@@ -154,6 +160,7 @@ def main() -> None:
                     universe=universe,
                     bt_cfg=bt_cfg,
                     offline=args.offline_llm,
+                    enable_altdata=args.altdata,
                 )
                 meta = json.loads((out / "metadata.json").read_text())
                 summary_rows.append(

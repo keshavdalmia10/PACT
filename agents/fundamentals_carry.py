@@ -19,9 +19,13 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import numpy as np
+import pandas as pd
+
 from agents._llm_helpers import views_from_llm_or_anchor
 from agents.base_agent import BaseAgent, InstrumentView
 from data.fetchers.alfred import HEADLINE_SERIES, first_release
+from data.fetchers.eia import crude_oil_inventory_us
 from pact_logging import get_logger
 
 log = get_logger(__name__)
@@ -42,9 +46,17 @@ SYSTEM_PROMPT = (
 class FundamentalsCarryAgent(BaseAgent):
     name = "fundamentals_carry"
 
-    def __init__(self, llm_client, universe: tuple[str, ...], enable_altdata: bool = False):
+    def __init__(
+        self,
+        llm_client,
+        universe: tuple[str, ...],
+        enable_altdata: bool = False,
+        cell_window: tuple[date, date] | None = None,
+    ):
         super().__init__(llm_client, universe)
         self.enable_altdata = enable_altdata
+        self.cell_window = cell_window
+        self._crude_inv: pd.Series | None = None
 
     def extract_factors(self, as_of: date) -> dict[str, dict[str, float]]:
         macro = self._fetch_rates(as_of)
@@ -84,7 +96,7 @@ class FundamentalsCarryAgent(BaseAgent):
                     "cpi_yoy": macro["cpi_yoy"],
                 })
             elif sym == "USO":
-                f.update({"eia_inventory_z": 0.0})
+                f["eia_inventory_z"] = self._uso_inventory_z(as_of)
                 if self.enable_altdata:
                     f.update({"noaa_hdd_z": 0.0, "hurricane_active": 0.0})
             elif sym == "BTC":
@@ -132,10 +144,53 @@ class FundamentalsCarryAgent(BaseAgent):
             return _bond_anchor(sym, f)
         if sym == "GLD":
             return _gold_anchor(f)
+        if sym == "USO":
+            return _oil_anchor(f)
         return InstrumentView(
             instrument=sym, direction=0, conviction=0.0, horizon="1q",
             factors=f, rationale="fundamentals anchor: factors not wired",
         )
+
+    def _uso_inventory_z(self, as_of: date) -> float:
+        """Z-score of latest weekly U.S. crude inventory vs trailing 52-week mean.
+
+        Positive z = stocks above trend (bearish oil); negative z = below
+        trend (bullish oil). Caches the full inventory series across calls.
+        """
+        if self._crude_inv is None:
+            if self.cell_window:
+                start, end = self.cell_window
+                start = start - timedelta(days=400)
+            else:
+                start = as_of - timedelta(days=400)
+                end = as_of
+            try:
+                df = crude_oil_inventory_us(start, end)
+                if df.empty:
+                    self._crude_inv = pd.Series(dtype=float)
+                else:
+                    s = pd.Series(
+                        data=df["value"].values,
+                        index=pd.to_datetime(df["period"]),
+                    ).sort_index()
+                    self._crude_inv = s
+            except Exception as e:
+                log.warning("eia crude inventory fetch failed: %s", type(e).__name__)
+                self._crude_inv = pd.Series(dtype=float)
+
+        s = self._crude_inv
+        if s is None or len(s) < 8:
+            return 0.0
+        as_of_ts = pd.Timestamp(as_of)
+        pit = s.loc[s.index <= as_of_ts]
+        if len(pit) < 8:
+            return 0.0
+        latest = float(pit.iloc[-1])
+        trailing = pit.iloc[-min(52, len(pit)):]
+        mu, sd = float(trailing.mean()), float(trailing.std())
+        if sd == 0:
+            return 0.0
+        return (latest - mu) / sd
 
     def _fetch_rates(self, as_of: date) -> dict[str, float]:
         start = as_of - timedelta(days=400)
@@ -182,6 +237,24 @@ def _bond_anchor(sym: str, f: dict[str, float]) -> InstrumentView:
         why = f"real_yield={real_yield:.2f}% neutral"
     return InstrumentView(
         instrument=sym, direction=direction, conviction=conv, horizon="1q",
+        factors=f, rationale=why,
+    )
+
+
+def _oil_anchor(f: dict[str, float]) -> InstrumentView:
+    """High inventories → short oil; low inventories → long oil."""
+    z = f.get("eia_inventory_z", 0.0)
+    if z > 1.0:
+        direction, conv = -1, min(0.3 + (z - 1.0) * 0.1, 0.5)
+        why = f"crude inventory z={z:.2f} > 1σ → bearish oil"
+    elif z < -1.0:
+        direction, conv = 1, min(0.3 + (abs(z) - 1.0) * 0.1, 0.5)
+        why = f"crude inventory z={z:.2f} < -1σ → bullish oil"
+    else:
+        direction, conv = 0, 0.0
+        why = f"crude inventory z={z:.2f} (within 1σ band)"
+    return InstrumentView(
+        instrument="USO", direction=direction, conviction=conv, horizon="1q",
         factors=f, rationale=why,
     )
 

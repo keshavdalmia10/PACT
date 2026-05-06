@@ -12,11 +12,16 @@ venv/
 .env
 .env.*
 *.pem
+# GCP service-account JSONs (contain private keys)
+pact-research-*.json
+*-service-account*.json
+.gcp/
 
 # IDE
 .vscode/
 .idea/
 .DS_Store
+.claude/
 
 # Logs
 logs/
