@@ -77,14 +77,26 @@ def _backtest_with_subset(
     protocol_key: str,
     keep_agents: tuple[str, ...],
     offline_llm: bool,
+    cell_window: tuple[date, date] | None = None,
+    enable_altdata: bool = False,
+    enable_secondary: tuple[str, ...] = (),
 ) -> pd.Series:
     """Run a backtest where specialists not in `keep_agents` are replaced by NullAgent.
 
     Portfolio manager and risk_correlation are kept by default (PM is the
     aggregator; risk doesn't take directional views, only scaling).
+
+    `cell_window`, `enable_altdata`, `enable_secondary` are threaded through
+    so the LOO's "full" run reproduces the original cell exactly — without
+    them the Sharpe(full) drifts from the matrix run's published value.
     """
     llm = build_llm_client(regime, offline=offline_llm)
-    full = build_agents(llm, universe)
+    full = build_agents(
+        llm, universe,
+        cell_window=cell_window,
+        enable_altdata=enable_altdata,
+        enable_secondary=enable_secondary,
+    )
     keep = set(keep_agents) | {"portfolio_manager"}
     nulled: dict[str, object] = {}
     for name, agent in full.items():
@@ -99,15 +111,30 @@ def _backtest_with_subset(
 
 def _make_runner(cell_meta: dict, offline_llm: bool):
     universe = tuple(cell_meta["universe"])
+    start = _parse_date(cell_meta["start"])
+    end = _parse_date(cell_meta["end"])
     bt_cfg = BacktestConfig(
-        start=_parse_date(cell_meta["start"]),
-        end=_parse_date(cell_meta["end"]),
+        start=start,
+        end=end,
         starting_capital=float(cell_meta["starting_capital"]),
         transaction_cost_bps_roundtrip=float(cell_meta["transaction_cost_bps_roundtrip"]),
         portfolio=PortfolioConfig(),
     )
     regime = cell_meta["regime"]
     protocol_key = cell_meta["protocol"]
+    # Reproduce the original cell's agent context exactly so the LOO's "full"
+    # baseline matches the matrix-run Sharpe.
+    cell_window = (start, end)
+    # Reproduce the original cell's flags. For matrix-run cells (commit
+    # b6e... onwards) `enable_altdata` is stored explicitly. For older
+    # cells we fall back to True since every Window B sweep ran with
+    # --altdata, which is the only way the equity-fundamentals factors
+    # actually flow through the LLM.
+    if "enable_altdata" in cell_meta:
+        enable_altdata = bool(cell_meta["enable_altdata"])
+    else:
+        enable_altdata = bool(cell_meta.get("enable_altdata_in_fundamentals", True))
+    enable_secondary = tuple(cell_meta.get("enable_secondary", ()))
 
     def run_with_agents(subset: tuple[str, ...]) -> pd.Series:
         return _backtest_with_subset(
@@ -117,6 +144,9 @@ def _make_runner(cell_meta: dict, offline_llm: bool):
             protocol_key=protocol_key,
             keep_agents=subset,
             offline_llm=offline_llm,
+            cell_window=cell_window,
+            enable_altdata=enable_altdata,
+            enable_secondary=enable_secondary,
         )
 
     return run_with_agents

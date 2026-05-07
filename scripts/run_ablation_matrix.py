@@ -96,6 +96,7 @@ def run_cell(
             "end": end.isoformat(),
             "starting_capital": bt_cfg.starting_capital,
             "transaction_cost_bps_roundtrip": bt_cfg.transaction_cost_bps_roundtrip,
+            "enable_altdata": bool(enable_altdata),
         },
     )
     final_eq = float(result.equity.iloc[-1]) if len(result.equity) else float("nan")
