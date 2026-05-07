@@ -53,7 +53,10 @@ class GPT4oClient(LLMClient):
                 )
             from openai import OpenAI
 
-            self._client = OpenAI(api_key=self._api_key)
+            # Strict per-request timeout + retries. Without these the SDK can
+            # hang for many minutes on a stuck TCP connection (observed in
+            # production: a single call hung for 54 min with no response).
+            self._client = OpenAI(api_key=self._api_key, timeout=60.0, max_retries=3)
         return self._client
 
     def complete(

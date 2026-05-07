@@ -87,7 +87,7 @@ class FundamentalsCarryAgent(BaseAgent):
                 # IWM is excluded — see EQUITY_INDICES_AGGREGATABLE.
                 if sym in EQUITY_INDICES_AGGREGATABLE:
                     try:
-                        agg = index_pe_yoy(sym, as_of)
+                        agg = index_pe_yoy(sym, as_of, cell_window=self.cell_window)
                         f["agg_pe"] = float(agg.get("agg_pe", 0.0)) if pd.notna(agg.get("agg_pe", 0.0)) else 0.0
                         f["fwd_earnings_yield"] = float(agg.get("fwd_earnings_yield", 0.0))
                         f["rev_growth_yoy"] = float(agg.get("rev_growth_yoy", 0.0))

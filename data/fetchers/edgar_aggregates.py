@@ -180,12 +180,33 @@ def ttm_sum(
     return None
 
 
-def market_cap(symbol: str, as_of: date) -> float | None:
-    """Market cap on `as_of` from yfinance close × shares outstanding."""
+def market_cap(
+    symbol: str,
+    as_of: date,
+    cell_window: tuple[date, date] | None = None,
+) -> float | None:
+    """Market cap on `as_of` from yfinance close × shares outstanding.
+
+    `cell_window`: when provided, the underlying price fetch uses the cell
+    window so the disk-cache entry is shared across every rebalance in the
+    cell (a single yfinance call per constituent per cell, instead of one
+    per rebalance — ~150× speedup on weekly rebal).
+    """
     from data.fetchers.prices import fetch_ohlcv
 
-    px = fetch_ohlcv(symbol, as_of - pd.Timedelta(days=10).to_pytimedelta(), as_of)
+    if cell_window:
+        # Always fetch the same wide window so disk cache is reused.
+        fetch_start = cell_window[0] - pd.Timedelta(days=10).to_pytimedelta()
+        fetch_end = cell_window[1]
+    else:
+        fetch_start = as_of - pd.Timedelta(days=10).to_pytimedelta()
+        fetch_end = as_of
+    px = fetch_ohlcv(symbol, fetch_start, fetch_end)
     if px.empty or "Adj Close" not in px.columns:
+        return None
+    # Slice up to as_of so we use the right close.
+    px = px.loc[px.index <= pd.Timestamp(as_of)]
+    if px.empty:
         return None
     close = float(px["Adj Close"].iloc[-1])
 
@@ -205,11 +226,15 @@ def index_aggregate(
     constituents: list[str],
     as_of: date,
     max_constituents: int | None = None,
+    cell_window: tuple[date, date] | None = None,
 ) -> dict[str, float]:
     """Compute market-cap-weighted aggregate fundamentals for an index.
 
     Returns dict with keys: agg_pe, fwd_earnings_yield, rev_growth_yoy,
     fcf_yield, n_constituents.
+
+    `cell_window`: passed to market_cap() so per-constituent price fetches
+    reuse a single wide-window cache entry across all rebalances in a cell.
     """
     if max_constituents:
         constituents = constituents[:max_constituents]
@@ -227,7 +252,7 @@ def index_aggregate(
         cik = cik_map.get(sym)
         if cik is None:
             continue
-        mc = market_cap(sym, as_of)
+        mc = market_cap(sym, as_of, cell_window=cell_window)
         if mc is None or mc <= 0:
             continue
         facts = company_facts(cik)
@@ -289,11 +314,12 @@ def load_constituents(symbol: str) -> list[str]:
     return json.loads(path.read_text())["constituents"]
 
 
-def index_pe_yoy(symbol: str, as_of: date) -> dict[str, float]:
-    """Public entry point used by fundamentals_carry equity branch.
-
-    Replaces the prior NotImplementedError stub.
-    """
+def index_pe_yoy(
+    symbol: str,
+    as_of: date,
+    cell_window: tuple[date, date] | None = None,
+) -> dict[str, float]:
+    """Public entry point used by fundamentals_carry equity branch."""
     constituents = load_constituents(symbol)
     if not constituents:
         log.warning("edgar_aggregates: no constituent list for %s; returning zeros", symbol)
@@ -305,6 +331,6 @@ def index_pe_yoy(symbol: str, as_of: date) -> dict[str, float]:
 
     log.info("edgar_aggregates compute symbol=%s as_of=%s n_constituents=%d",
              symbol, as_of, len(constituents))
-    agg = index_aggregate(constituents, as_of)
+    agg = index_aggregate(constituents, as_of, cell_window=cell_window)
     cache_write(NAMESPACE + ".aggregate", {"symbol": symbol, "as_of": as_of.isoformat()}, agg)
     return agg
