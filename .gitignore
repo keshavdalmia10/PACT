@@ -47,5 +47,6 @@ results/tables/*.csv
 results/tables/*.md
 results/figures/
 results/matrix_run_*.csv
+results/altdata_run_*.csv
 *.parquet
 *.feather

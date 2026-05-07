@@ -51,12 +51,23 @@ class GPT4oClient(LLMClient):
                 raise RuntimeError(
                     "OPENAI_API_KEY not set. Either provide api_key or run offline=True."
                 )
+            import httpx
             from openai import OpenAI
 
-            # Strict per-request timeout + retries. Without these the SDK can
-            # hang for many minutes on a stuck TCP connection (observed in
-            # production: a single call hung for 54 min with no response).
-            self._client = OpenAI(api_key=self._api_key, timeout=60.0, max_retries=3)
+            # The OpenAI SDK's `timeout=N` covers the whole request, but in
+            # practice connections can stick at the socket level for hours
+            # (observed: 80 min hang despite timeout=60). Wire an explicit
+            # httpx.Timeout with separate connect/read/write/pool deadlines
+            # so a stuck socket fails fast and SDK retries kick in.
+            http_client = httpx.Client(
+                timeout=httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0),
+            )
+            self._client = OpenAI(
+                api_key=self._api_key,
+                timeout=httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0),
+                max_retries=3,
+                http_client=http_client,
+            )
         return self._client
 
     def complete(
