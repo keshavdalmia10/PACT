@@ -1,6 +1,10 @@
 ---
 title: "PACT — Protocols for Agent Coordination in Trading: A Coordination-and-Attribution Study of Multi-Agent LLM Trading Systems"
-author: Keshav Dalmia
+author:
+  - Keshav Dalmia
+  - Prateek Verma
+  - Drumil Mehta
+  - Tasnia Islam
 affiliation: University of Illinois Urbana-Champaign
 date: May 2026
 mainfont: STIX Two Text
@@ -12,17 +16,20 @@ urlcolor: blue
 
 \begin{titlepage}
 \centering
-\vspace*{4cm}
+\vspace*{3cm}
 {\LARGE\bfseries PACT --- Protocols for Agent Coordination in Trading\par}
 \vspace{1cm}
 {\Large A Coordination-and-Attribution Study of Multi-Agent LLM Trading Systems\par}
-\vspace{3cm}
-{\large Keshav Dalmia\par}
+\vspace{2.5cm}
+{\large Keshav Dalmia \quad Prateek Verma \quad Drumil Mehta \quad Tasnia Islam\par}
+\vspace{0.6cm}
 {\large University of Illinois Urbana-Champaign\par}
-{\large \texttt{dalmia4@illinois.edu}\par}
 \vspace{2cm}
 {\large May 2026\par}
+\vspace{0.6cm}
+{\large Master's Project --- Track 4 (Coordination \& Attribution Research)\par}
 \vfill
+{\small Code repository: \texttt{https://github.com/keshavdalmia10/PACT}\par}
 \end{titlepage}
 
 # Title Page
@@ -30,11 +37,13 @@ urlcolor: blue
 **PACT — Protocols for Agent Coordination in Trading**
 *A Coordination-and-Attribution Study of Multi-Agent LLM Trading Systems*
 
-Keshav Dalmia · University of Illinois Urbana-Champaign · `dalmia4@illinois.edu`
+Keshav Dalmia · Prateek Verma · Drumil Mehta · Tasnia Islam
+
+University of Illinois Urbana-Champaign
 
 May 2026 · Master's Project · Track 4 (Coordination & Attribution Research)
 
-Code repository: `https://github.com/keshavdalmia10/PACT` · Commit `a9557a7`
+Code repository: `https://github.com/keshavdalmia10/PACT` · Commit `601cc99`
 
 ## Abstract
 
@@ -140,6 +149,10 @@ PACT instantiates seven specialist agents. Each agent extracts structured factor
 
 ### 5.1 Coordination protocols (the headline ablation)
 
+Figure 1 visualises the seven protocols side by side. Each panel shows the information-flow topology — agents (boxes), arrows (directed flow), aggregation rules (gold), and final outputs (green). The LLM-driven steps are highlighted in red; deterministic rule blocks are in grey. The same six specialist agents appear in every protocol; what differs is *how their outputs are combined*.
+
+![Figure 1. The seven coordination protocols of the headline ablation matrix. Each panel shows the information-flow topology for one protocol; specialist agents are blue, LLM-driven steps are red, aggregators / judges are gold, deterministic rules are grey, and final per-instrument target views are green.](../results/figures/coordination_protocols.png)
+
 The seven protocols form the seven rows of the headline matrix:
 
 1. **Single-LLM monolith** — one prompt sees all factor blobs, emits the per-instrument view list directly. Stand-in for the unstated baseline of TradingAgents/FinCon-style papers.
@@ -215,7 +228,7 @@ Per spec §12 step 4, we reproduce the TradingAgents headline window. On the sam
 
 Figure 1 visualises Sharpe across protocol × regime. Table 2 gives the numeric values.
 
-![Figure 1. Sharpe heatmap by protocol × regime, Window B 2022-2024, 10 instruments, with `+instrument` alt-data variant. Negative values in red, positive in blue.](../results/figures/headline_sharpe_grid.png)
+![Figure 2. Sharpe heatmap by protocol × regime, Window B 2022-2024, 10 instruments, with `+instrument` alt-data variant. Negative values in red, positive in blue.](../results/figures/headline_sharpe_grid.png)
 
 | Protocol | none | frontier (GPT-4o) | Δ frontier−none |
 |---|---:|---:|---:|
@@ -256,11 +269,11 @@ This is the cleanest expression of the FINSABER critique we could ask for. **A s
 
 ### 9.3 Equity curve illustrations
 
-Figures 2-3 show the equity-curve evolution for the two most informative protocols.
+Figures 3-4 show the equity-curve evolution for the two most informative protocols.
 
-![Figure 2. Equity curves for `independent_ensemble` (best frontier protocol). LLM regime improves modestly over no-LLM; both end below $1M.](../results/figures/equity_curves__independent_ensemble.png)
+![Figure 3. Equity curves for `independent_ensemble` (best frontier protocol). LLM regime improves modestly over no-LLM; both end below $1M.](../results/figures/equity_curves__independent_ensemble.png)
 
-![Figure 3. Equity curves for `debate` (best protocol overall in `none` regime). The LLM regime materially worsens performance.](../results/figures/equity_curves__debate.png)
+![Figure 4. Equity curves for `debate` (best protocol overall in `none` regime). The LLM regime materially worsens performance.](../results/figures/equity_curves__debate.png)
 
 The equity-curve view makes clear that the frontier-LLM regime adds turnover and drawdown without proportional return.
 
@@ -268,9 +281,9 @@ The equity-curve view makes clear that the frontier-LLM regime adds turnover and
 
 ### 10.1 Per-agent leave-one-out
 
-Figure 4 and Table 4 present LOO attribution on the headline cell `b__frontier__sequential_pipeline`. We run seven backtests (full set + each of six specialists removed in turn) under identical agent-construction context (same `cell_window`, same `enable_altdata` flag).
+Figure 5 and Table 4 present LOO attribution on the headline cell `b__frontier__sequential_pipeline`. We run seven backtests (full set + each of six specialists removed in turn) under identical agent-construction context (same `cell_window`, same `enable_altdata` flag).
 
-![Figure 4. Per-agent leave-one-out attribution. Bars show Sharpe(full) − Sharpe(without agent). Negative bars mean the agent is hurting the strategy.](../results/figures/attribution_bars.png)
+![Figure 5. Per-agent leave-one-out attribution. Bars show Sharpe(full) − Sharpe(without agent). Negative bars mean the agent is hurting the strategy.](../results/figures/attribution_bars.png)
 
 | Dropped agent | Sharpe (full) | Sharpe (without) | Δ Sharpe |
 |---|---:|---:|---:|
@@ -317,9 +330,9 @@ CBS measures the cost level at which a coordinated cell's net Sharpe equals the 
 
 ### 11.1 Transaction-cost sensitivity
 
-Figure 5 shows Sharpe at varying round-trip transaction costs across all twelve cells (six frontier + six none); Table 6 gives numerical values for the frontier regime.
+Figure 6 shows Sharpe at varying round-trip transaction costs across all twelve cells (six frontier + six none); Table 6 gives numerical values for the frontier regime.
 
-![Figure 5. Sharpe vs transaction cost across protocol × regime. Most cells cross zero between 5 and 30 bps; only `independent_ensemble` (frontier) starts positive.](../results/figures/tc_sensitivity.png)
+![Figure 6. Sharpe vs transaction cost across protocol × regime. Most cells cross zero between 5 and 30 bps; only `independent_ensemble` (frontier) starts positive.](../results/figures/tc_sensitivity.png)
 
 | Protocol | 5 bps | 10 bps | 30 bps | 50 bps | 100 bps | 200 bps |
 |---|---:|---:|---:|---:|---:|---:|
