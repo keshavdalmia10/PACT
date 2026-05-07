@@ -6,8 +6,8 @@ monofont: Menlo
 geometry: margin=1in
 linkcolor: blue
 urlcolor: blue
-fontsize: 11pt
-linestretch: 1.15
+fontsize: 12pt
+linestretch: 2.0
 ---
 
 \begin{titlepage}
@@ -63,7 +63,7 @@ The second cluster comprises *critiques and methodology*. FINSABER (Li et al., 2
 
 The third cluster addresses *lookahead and contamination*. Sarkar and Vafa (2024) show pretrained LLMs encode forward-looking information that leaks into ostensibly out-of-sample tests. He et al. (2025) release year-stamped checkpoints (ChronoBERT, ChronoGPT) trained only on data up to a fixed cutoff to enable contamination-clean inference. Yan et al. (2026) develop time-aware pretraining methodology for the same purpose. Shah et al. (2025) document specific cases where LLMs encode post-cutoff financial knowledge. PACT sits at the intersection: a coordination-attribution study with the contamination-clean ChronoGPT family available as a regime control and the frontier GPT-4o pinned by dated model id.
 
-PACT also draws on classical financial-econometrics infrastructure: portfolio theory (Markowitz, 1952), Black-Litterman view aggregation (Black and Litterman, 1992), Almgren-Chriss execution costs (Almgren and Chriss, 2001), the Sharpe ratio (Sharpe, 1966), the Sortino ratio (Sortino and van der Meer, 1991), Jegadeesh-Titman momentum (Jegadeesh and Titman, 1993), Carhart's momentum factor (Carhart, 1997), the RiskMetrics EWMA standard (J.P. Morgan, 1996), GARCH (Bollerslev, 1986), Cornish-Fisher VaR (Cornish and Fisher, 1938), Daniel-Moskowitz momentum crashes (Daniel and Moskowitz, 2016), the Newey-West HAC variance estimator (Newey and West, 1987), and the Politis-Romano stationary block bootstrap (Politis and Romano, 1994). Statistical inference uses the Ledoit-Wolf robust Sharpe test (Ledoit and Wolf, 2008) with Benjamini-Hochberg false-discovery correction (Benjamini and Hochberg, 1995). Backtest reflexivity follows López de Prado (2018).
+PACT implements the following classical-econometrics infrastructure directly: the Sharpe ratio (Sharpe, 1966), the Sortino ratio (Sortino and van der Meer, 1991), Jegadeesh-Titman momentum (Jegadeesh and Titman, 1993), Carhart's cross-sectional momentum (Carhart, 1997), the RiskMetrics EWMA standard (J.P. Morgan, 1996), GARCH(1,1) (Bollerslev, 1986), Cornish-Fisher VaR (Cornish and Fisher, 1938), the Newey-West HAC variance estimator (Newey and West, 1987), the Politis-Romano stationary block bootstrap (Politis and Romano, 1994), the Ledoit-Wolf robust Sharpe test (Ledoit and Wolf, 2008), and the Benjamini-Hochberg false-discovery correction (Benjamini and Hochberg, 1995). Beyond these, several classical methods motivate our design but are not fully implemented: Markowitz (1952) mean-variance and Black-Litterman (1992) Bayesian view aggregation are simplified to conviction-weighted volatility-targeting; Almgren-Chriss (2001) optimal execution is reduced to a linear-in-ADV slippage approximation; Daniel-Moskowitz (2016) momentum-crash analysis informs our 2022 discussion but is not built into the strategy; and López de Prado (2018) purged-and-embargoed cross-validation is a stricter alternative to our standard rolling walk-forward. We flag these gaps explicitly so that "cited" is never mistaken for "implemented."
 
 ## 3 RESEARCH GAP AND HYPOTHESES
 
@@ -135,7 +135,7 @@ with $\omega, \alpha, \beta > 0$ and $\alpha + \beta < 1$. Cornish-Fisher VaR (C
 
 $$\mathrm{VaR}_\alpha = \mu - \sigma\!\left(z_\alpha + \tfrac{z_\alpha^2 - 1}{6} S + \tfrac{z_\alpha^3 - 3 z_\alpha}{24} K\right). \tag{3}$$
 
-Multi-horizon momentum follows Jegadeesh and Titman (1993) and Carhart (1997). Daniel and Moskowitz (2016) document momentum crashes after volatility shocks, relevant to the 2022 turn that begins our test window.
+Multi-horizon momentum follows Jegadeesh and Titman (1993) and Carhart (1997). Daniel and Moskowitz (2016) document momentum crashes after volatility shocks; we cite this as context for the 2022 turn that begins our test window but do not implement an explicit crash-detection overlay.
 
 ### 6.2 Factor extraction and prompt cache
 
@@ -147,11 +147,11 @@ The contamination-clean regime uses `manelalab/chrono-gpt-instruct-v1-YYYY1231` 
 
 ### 6.4 Walk-forward protocol
 
-Following López de Prado (2018), we use a non-overlapping rolling 3-year-in-sample / 6-month-out-of-sample walk-forward. The agents do not re-optimise on IS data — they consume only point-in-time factors at OOS rebalance dates. Cells are sequences of weekly Friday rebalances over the OOS period. Each LLM-driven agent uses a system prompt enforcing strict JSON output with the `InstrumentView` schema and forbidding invented factors; the full prompt set is checked into the repository at the same commit as cell artifacts.
+We use a non-overlapping rolling 3-year-in-sample / 6-month-out-of-sample walk-forward. The agents do not re-optimise on IS data — they consume only point-in-time factors at OOS rebalance dates. Cells are sequences of weekly Friday rebalances over the OOS period. Each LLM-driven agent uses a system prompt enforcing strict JSON output with the `InstrumentView` schema and forbidding invented factors; the full prompt set is checked into the repository at the same commit as cell artifacts. López de Prado (2018) advocates strictly stronger purged-and-embargoed cross-validation; we discuss this as a future-work upgrade in Section 13.
 
 ## 7 PORTFOLIO CONSTRUCTION AND RISK MANAGEMENT
 
-Following Markowitz (1952) and Black and Litterman (1992), we map per-instrument views into target weights via volatility targeting. For instrument $i$ with view direction $d_i \in \{-1, 0, +1\}$ and conviction $c_i \in [0,1]$:
+We map per-instrument views into target weights via conviction-weighted volatility targeting. This is a simplified Markowitz-style sizing that does not require an estimated expected-return vector or a full covariance inverse, and is therefore not the formal mean-variance optimum (Markowitz, 1952) or the Bayesian-posterior view aggregation of Black and Litterman (1992); both are aspirational extensions left for future work. For instrument $i$ with view direction $d_i \in \{-1, 0, +1\}$ and conviction $c_i \in [0,1]$:
 
 $$w_i = \mathrm{clip}\!\left(d_i \cdot c_i \cdot \frac{\sigma_\mathrm{target}}{\widehat{\sigma}_i},\; -w_\mathrm{cap},\; +w_\mathrm{cap}\right), \tag{4}$$
 
@@ -159,7 +159,7 @@ with per-instrument vol target $\sigma_\mathrm{target} = 10\%$, per-name cap $w_
 
 $$w_i^{\,\mathrm{breaker}} = \tfrac{1}{2}\, w_i \quad \text{if} \quad \min_{s \leq t} \frac{V_s}{\max_{u \leq s} V_u} - 1 \leq -0.15. \tag{5}$$
 
-The correlation throttle multiplies all weights by 0.70 when 30-day cross-sectional mean correlation exceeds 0.60. Transaction costs follow Almgren and Chriss (2001): a flat 30 bps round-trip plus a linear slippage component proportional to trade size as a fraction of 21-day ADV. Weekly turnover is capped at 50% of gross. Starting capital is \$1,000,000.
+The correlation throttle multiplies all weights by 0.70 when 30-day cross-sectional mean correlation exceeds 0.60. Transaction costs are modelled as a flat 30 bps round-trip plus a linear-in-ADV slippage approximation; this is a coarse first-order analogue of Almgren and Chriss (2001) optimal execution, not the full permanent-and-temporary impact model. Weekly turnover is capped at 50% of gross. Starting capital is \$1,000,000.
 
 ## 8 BACKTESTING AND EVALUATION DESIGN
 
@@ -378,7 +378,7 @@ The constructive reading is that the architecture that benefits from LLM is the 
 
 ## 13 LIMITATIONS
 
-We document the principal limitations honestly. *Window B only* — the headline experiment is a 3-year window. Window A (2010-2024) is wired but compute-prohibitive on this hardware budget. *ChronoGPT regime not yet executed* — H2 is therefore not yet tested; the 26 yearly checkpoints are pinned by HF commit SHA but the open-source-regime sweep has not been run. *Static constituent lists* for equity-index XBRL aggregation are frozen as-of late 2025 and applied historically, introducing survivorship bias (small for Window B). *MVRV proxy* — BTC on-chain MVRV uses a price/200-day-MA stand-in. *EEM ADR skew* — the XBRL aggregator skips foreign filers without SEC `companyfacts`. *IWM equity-fundamentals deliberately zeroed* — a 30-name list covers only ~5% of Russell 2000 weight. *Single random seed* — all cells use seed 42; seed sensitivity is wired but not reported here. *Sub-period instability* (Section 11.2) implies pooled Window B Sharpes should be interpreted as 2.5-year averages, not as expected-return estimates.
+We document the principal limitations honestly. *Window B only* — the headline experiment is a 3-year window. Window A (2010-2024) is wired but compute-prohibitive on this hardware budget. *ChronoGPT regime not yet executed* — H2 is therefore not yet tested; the 26 yearly checkpoints are pinned by HF commit SHA but the open-source-regime sweep has not been run. *Static constituent lists* for equity-index XBRL aggregation are frozen as-of late 2025 and applied historically, introducing survivorship bias (small for Window B). *MVRV proxy* — BTC on-chain MVRV uses a price/200-day-MA stand-in. *EEM ADR skew* — the XBRL aggregator skips foreign filers without SEC `companyfacts`. *IWM equity-fundamentals deliberately zeroed* — a 30-name list covers only ~5% of Russell 2000 weight. *Single random seed* — all cells use seed 42; seed sensitivity is wired but not reported here. *Sub-period instability* (Section 11.2) implies pooled Window B Sharpes should be interpreted as 2.5-year averages, not as expected-return estimates. *Methodological scope* — Section 7's portfolio construction is conviction-weighted vol-targeting, not the formal Markowitz mean-variance optimum or the Black-Litterman posterior; transaction costs are a linear-in-ADV approximation, not the full Almgren-Chriss framework; the walk-forward protocol does not yet implement López de Prado's purged-and-embargoed cross-validation. Closing each of these gaps is a natural extension and would not change any of this paper's headline findings.
 
 ## 14 CONCLUSION
 
