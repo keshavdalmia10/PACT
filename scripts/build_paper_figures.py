@@ -118,6 +118,9 @@ def figure_tc_sensitivity(window: str | None) -> Path | None:
     df = pd.read_csv(src)
     if window:
         df = df[df["window"] == window]
+    # Headline TC plot shows only the 14 matrix cells; the 20 alt-data
+    # ablation cells are reported separately in the paper's §10.2 table.
+    df = df[~df["cell_id"].str.startswith("altdata_")]
     if df.empty:
         return None
     df["label"] = df["regime"].astype(str) + " / " + df["protocol"].astype(str)
