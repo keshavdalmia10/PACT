@@ -53,9 +53,10 @@ def arrow(ax, x1, y1, x2, y2, color="#444", style="-|>", lw=0.8):
 def setup_panel(ax, title):
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
-    ax.set_aspect("equal")
+    # NOTE: do not set_aspect("equal") — it compresses horizontal scale
+    # when the gridspec cell is wider than tall, causing label overlap.
     ax.axis("off")
-    ax.set_title(title, fontsize=10, fontweight="bold", pad=4)
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=4)
 
 
 # ────────────────── Protocol drawings ──────────────────
@@ -77,57 +78,70 @@ def draw_single_agent(ax):
 
 def draw_independent_ensemble(ax):
     setup_panel(ax, "2. Independent ensemble (no comm)")
-    specs = ["Macro", "Narr.", "X-Asset", "Tech", "Funds", "Risk*"]
-    xs = [1.0, 2.6, 4.2, 5.8, 7.4, 9.0]
-    for x, name in zip(xs, specs):
-        box(ax, x, 7, 1.4, 0.8, name, SPECIALIST, SPECIALIST_EDGE, fontsize=9)
-    box(ax, 5, 4, 5, 1.0, "Median vote\n(direction · conviction-weighted)", ANCHOR, ANCHOR_EDGE, fontsize=8)
-    box(ax, 5, 1.5, 4, 0.9, "Per-instrument target views", PM, PM_EDGE, fontsize=8)
-    for x in xs:
-        arrow(ax, x, 6.6, 5, 4.5)
-    arrow(ax, 5, 3.5, 5, 1.95)
-    ax.text(5, 0.5, "*Risk = scaling input only (no direction)", fontsize=7, style="italic", ha="center")
+    # 2 rows × 3 cols of agents — easier to read than 1×6
+    row1 = [("Macro", 1.7), ("Narrative", 5.0), ("Cross-Asset", 8.3)]
+    row2 = [("Technical", 1.7), ("Fundamentals", 5.0), ("Risk*", 8.3)]
+    for name, x in row1:
+        box(ax, x, 8.4, 2.6, 0.8, name, SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+    for name, x in row2:
+        box(ax, x, 7.0, 2.6, 0.8, name, SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+    box(ax, 5, 4.2, 5, 1.0, "Median vote\n(direction · conviction-weighted)",
+        ANCHOR, ANCHOR_EDGE, fontsize=10)
+    box(ax, 5, 1.6, 4.5, 0.9, "Per-instrument target views", PM, PM_EDGE, fontsize=10)
+    # Arrows: from row1 + row2 → median vote
+    for _, x in row1 + row2:
+        arrow(ax, x, 6.6, 5, 4.7)
+    arrow(ax, 5, 3.7, 5, 2.05)
+    ax.text(5, 0.6, "*Risk = scaling input only (no direction)",
+            fontsize=8, style="italic", ha="center")
 
 
 def draw_sequential_pipeline(ax):
     setup_panel(ax, "3. Sequential pipeline (3 phases)")
     # Phase 1
-    box(ax, 3.2, 8, 1.6, 0.7, "Macro", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
-    box(ax, 5.4, 8, 1.6, 0.7, "Narrative", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
-    ax.text(1.4, 8, "Phase 1\nScreener", fontsize=8, ha="center", va="center", style="italic", color="#555")
+    box(ax, 4.2, 8.5, 2.4, 0.7, "Macro", SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+    box(ax, 7.4, 8.5, 2.4, 0.7, "Narrative", SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+    ax.text(1.4, 8.5, "Phase 1\nScreener", fontsize=9, ha="center", va="center",
+            style="italic", color="#555")
     # Phase 2
-    box(ax, 3.2, 5.5, 1.6, 0.7, "X-Asset", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
-    box(ax, 5.4, 5.5, 1.6, 0.7, "Tech", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
-    box(ax, 7.6, 5.5, 1.6, 0.7, "Funds", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
-    ax.text(1.4, 5.5, "Phase 2\nDeep\nanalysis", fontsize=8, ha="center", va="center", style="italic", color="#555")
+    box(ax, 3.5, 6.0, 2.0, 0.7, "Cross-Asset", SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+    box(ax, 6.0, 6.0, 2.0, 0.7, "Technical", SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+    box(ax, 8.5, 6.0, 2.0, 0.7, "Fundamentals", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
+    ax.text(1.4, 6.0, "Phase 2\nDeep\nanalysis", fontsize=9, ha="center", va="center",
+            style="italic", color="#555")
     # Phase 3
-    box(ax, 4.2, 3, 1.6, 0.7, "Risk*", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
-    box(ax, 6.4, 3, 1.6, 0.7, "PM", PM, PM_EDGE, fontsize=9)
-    ax.text(1.4, 3, "Phase 3\nRisk +\nportfolio", fontsize=8, ha="center", va="center", style="italic", color="#555")
-    box(ax, 5.3, 1, 4, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=9)
-    # arrows: P1 → P2 (single line down per upstream)
-    for x in [3.2, 5.4]:
-        arrow(ax, x, 7.65, x, 5.9)
-    # P2 → P3 (each Phase 2 agent feeds Risk + PM)
-    for x in [3.2, 5.4, 7.6]:
-        arrow(ax, x, 5.15, 4.2, 3.4)
-        arrow(ax, x, 5.15, 6.4, 3.4)
-    arrow(ax, 4.2, 2.65, 6.4, 2.65)
-    arrow(ax, 6.4, 2.65, 5.5, 1.45)
+    box(ax, 4.2, 3.5, 2.0, 0.7, "Risk*", SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+    box(ax, 6.8, 3.5, 2.0, 0.7, "PM", PM, PM_EDGE, fontsize=10)
+    ax.text(1.4, 3.5, "Phase 3\nRisk +\nportfolio", fontsize=9, ha="center", va="center",
+            style="italic", color="#555")
+    box(ax, 5.5, 1.4, 4.5, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=10)
+    # arrows
+    arrow(ax, 4.2, 8.15, 4.0, 6.4)
+    arrow(ax, 7.4, 8.15, 7.0, 6.4)
+    for x in [3.5, 6.0, 8.5]:
+        arrow(ax, x, 5.65, 4.2, 3.9)
+        arrow(ax, x, 5.65, 6.8, 3.9)
+    arrow(ax, 4.2, 3.15, 6.8, 3.15)
+    arrow(ax, 6.8, 3.15, 5.5, 1.85)
 
 
 def draw_hierarchical(ax):
     setup_panel(ax, "4. Hierarchical (manager-analyst)")
-    box(ax, 5, 8.3, 3, 1.0, "PM (manager)\nbriefs · veto", PM, PM_EDGE, fontsize=9)
-    specs = ["Macro", "Narr.", "X-Asset", "Tech", "Funds", "Risk*"]
-    xs = [1.0, 2.6, 4.2, 5.8, 7.4, 9.0]
-    for x, name in zip(xs, specs):
-        box(ax, x, 5.3, 1.4, 0.8, name, SPECIALIST, SPECIALIST_EDGE, fontsize=9)
-        # bidirectional arrows
-        arrow(ax, 5, 7.8, x, 5.7, color="#888", lw=0.6, style="<|-|>")
-    box(ax, 5, 2.7, 3.6, 0.85, "Confidence-veto\n(threshold 0.15)", JUDGE, JUDGE_EDGE, fontsize=9)
-    box(ax, 5, 0.9, 4, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=9)
-    arrow(ax, 5, 4.9, 5, 3.15)
+    box(ax, 5, 8.5, 3.4, 0.9, "PM (manager)\nbriefs · veto", PM, PM_EDGE, fontsize=10)
+    # 2 rows × 3 cols of analysts
+    row1 = [("Macro", 1.7), ("Narrative", 5.0), ("Cross-Asset", 8.3)]
+    row2 = [("Technical", 1.7), ("Fundamentals", 5.0), ("Risk*", 8.3)]
+    for name, x in row1:
+        box(ax, x, 6.0, 2.6, 0.7, name, SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+        arrow(ax, 5, 8.05, x, 6.35, color="#888", lw=0.6, style="<|-|>")
+    for name, x in row2:
+        box(ax, x, 4.7, 2.6, 0.7, name, SPECIALIST, SPECIALIST_EDGE, fontsize=10)
+        arrow(ax, 5, 8.05, x, 5.05, color="#888", lw=0.6, style="<|-|>")
+    box(ax, 5, 2.7, 4.0, 0.85, "Confidence-veto (threshold 0.15)",
+        JUDGE, JUDGE_EDGE, fontsize=10)
+    box(ax, 5, 0.9, 4.5, 0.85, "Per-instrument target views",
+        PM, PM_EDGE, fontsize=10)
+    arrow(ax, 5, 4.35, 5, 3.15)
     arrow(ax, 5, 2.25, 5, 1.35)
 
 
@@ -146,16 +160,20 @@ def draw_debate(ax):
 
 def draw_deterministic(ax):
     setup_panel(ax, "6. Deterministic anchor only (no LLM)")
-    box(ax, 5, 8, 6, 0.9, "Multi-horizon momentum\n(1m · 3m · 6m · 12m)", ANCHOR, ANCHOR_EDGE, fontsize=9)
-    box(ax, 2.2, 5.5, 3.4, 1.0, "Inverse-volatility\n(EWMA λ=0.94)", ANCHOR, ANCHOR_EDGE, fontsize=9)
-    box(ax, 7.8, 5.5, 3.4, 1.0, "Drawdown breaker\n(60-day MDD ≥ 15%)", ANCHOR, ANCHOR_EDGE, fontsize=9)
-    box(ax, 5, 2.8, 4, 0.9, "Vol-targeted weights\n(rule-based)", PM, PM_EDGE, fontsize=9)
-    box(ax, 5, 0.9, 4, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=9)
-    arrow(ax, 5, 7.55, 2.2, 6.0)
-    arrow(ax, 5, 7.55, 7.8, 6.0)
-    arrow(ax, 2.2, 5.0, 5, 3.25)
-    arrow(ax, 7.8, 5.0, 5, 3.25)
-    arrow(ax, 5, 2.35, 5, 1.35)
+    box(ax, 5, 8.5, 6.5, 0.85, "Multi-horizon momentum  (1m · 3m · 6m · 12m)",
+        ANCHOR, ANCHOR_EDGE, fontsize=10)
+    box(ax, 2.5, 6.0, 4.0, 0.9, "Inverse-volatility  (EWMA λ=0.94)",
+        ANCHOR, ANCHOR_EDGE, fontsize=10)
+    box(ax, 7.5, 6.0, 4.0, 0.9, "Drawdown breaker  (60-day MDD ≥ 15%)",
+        ANCHOR, ANCHOR_EDGE, fontsize=9)
+    box(ax, 5, 3.4, 4.5, 0.9, "Vol-targeted weights  (rule-based)",
+        PM, PM_EDGE, fontsize=10)
+    box(ax, 5, 1.3, 4.5, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=10)
+    arrow(ax, 5, 8.05, 2.5, 6.5)
+    arrow(ax, 5, 8.05, 7.5, 6.5)
+    arrow(ax, 2.5, 5.5, 5, 3.85)
+    arrow(ax, 7.5, 5.5, 5, 3.85)
+    arrow(ax, 5, 2.95, 5, 1.75)
 
 
 def draw_llm_plus_anchor(ax):
