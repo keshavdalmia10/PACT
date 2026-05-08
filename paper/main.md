@@ -207,13 +207,13 @@ Figure 2 visualises Sharpe across protocol × regime; Table 2 gives numeric valu
 
 | Protocol | none | frontier | Δ (frontier − none) |
 |---|---:|---:|---:|
-| `single_agent` | NaN | −0.228 | n/a |
-| `independent_ensemble` | −0.369 | *−0.129* | +0.239 |
-| `sequential_pipeline` | −0.032 | −0.445 | −0.413 |
-| `hierarchical` | −0.209 | −0.521 | −0.312 |
-| `debate` | *+0.271* | −0.615 | −0.886 |
-| `deterministic_only` | −0.190 | −0.264 | −0.074 |
-| `llm_plus_anchor` | −0.190 | −0.262 | +0.072 |
+| single agent | NaN | −0.228 | n/a |
+| independent ensemble | −0.369 | *−0.129* | +0.239 |
+| sequential pipeline | −0.032 | −0.445 | −0.413 |
+| hierarchical | −0.209 | −0.521 | −0.312 |
+| debate | *+0.271* | −0.615 | −0.886 |
+| deterministic only | −0.190 | −0.264 | −0.074 |
+| LLM + anchor | −0.190 | −0.262 | +0.072 |
 
 Table 2. Headline 7×2 Sharpe matrix.
 
@@ -252,12 +252,12 @@ Figure 5 and Table 4 present LOO attribution on the headline cell `b__frontier__
 
 | Dropped agent | Sharpe (full) | Sharpe (without) | $\Delta_i^{\,\mathrm{LOO}}$ |
 |---|---:|---:|---:|
-| `narrative_event` | −0.445 | *−0.164* | *−0.281* |
-| `cross_asset_transmission` | −0.445 | −0.494 | +0.049 |
-| `fundamentals_carry` | −0.445 | −0.469 | +0.024 |
-| `risk_correlation` | −0.445 | −0.445 | 0.000 |
-| `technical_trend` | −0.445 | −0.679 | *+0.234* |
-| `macro_regime` | −0.445 | *−0.788* | *+0.343* |
+| narrative event | −0.445 | *−0.164* | *−0.281* |
+| cross-asset transmission | −0.445 | −0.494 | +0.049 |
+| fundamentals / carry | −0.445 | −0.469 | +0.024 |
+| risk / correlation | −0.445 | −0.445 | 0.000 |
+| technical trend | −0.445 | −0.679 | *+0.234* |
+| macro regime | −0.445 | *−0.788* | *+0.343* |
 
 Table 4. Per-agent LOO on the frontier sequential pipeline cell.
 
@@ -269,11 +269,11 @@ We run the alt-data ablation on the two best protocols (`sequential_pipeline`, `
 
 | Variant | seq pipeline none | seq pipeline frontier | debate none | debate frontier |
 |---|---:|---:|---:|---:|
-| `text_only` (baseline) | 0.000 | 0.000 | 0.000 | 0.000 |
-| `+attention` | 0.000 | *+0.129* | 0.000 | +0.011 |
-| `+event_probs` | 0.000 | +0.102 | 0.000 | +0.007 |
-| `+instrument` | 0.000 | +0.006 | 0.000 | −0.019 |
-| `full` | 0.000 | +0.103 | 0.000 | −0.007 |
+| text only (baseline) | 0.000 | 0.000 | 0.000 | 0.000 |
+| + attention | 0.000 | *+0.129* | 0.000 | +0.011 |
+| + event probs | 0.000 | +0.102 | 0.000 | +0.007 |
+| + instrument | 0.000 | +0.006 | 0.000 | −0.019 |
+| full | 0.000 | +0.103 | 0.000 | −0.007 |
 
 Table 5. Alt-data Sharpe deltas vs `text_only` baseline.
 
@@ -293,13 +293,13 @@ Figure 6 shows Sharpe at varying round-trip transaction costs across the twelve 
 
 | Protocol | 5 bps | 10 bps | 30 bps | 50 bps | 100 bps | 200 bps |
 |---|---:|---:|---:|---:|---:|---:|
-| `independent_ensemble` | *+0.39* | +0.29 | −0.13 | −0.54 | −1.50 | −2.95 |
-| `single_agent` | −0.02 | −0.06 | −0.23 | −0.39 | −0.80 | −1.56 |
-| `deterministic_only` | −0.02 | −0.07 | −0.26 | −0.46 | −0.94 | −1.84 |
-| `llm_plus_anchor` | −0.02 | −0.07 | −0.26 | −0.46 | −0.94 | −1.83 |
-| `sequential_pipeline` | −0.11 | −0.18 | −0.45 | −0.71 | −1.36 | −2.53 |
-| `hierarchical` | −0.20 | −0.26 | −0.52 | −0.78 | −1.41 | −2.55 |
-| `debate` | −0.20 | −0.28 | −0.62 | −0.95 | −1.74 | −3.08 |
+| independent ensemble | *+0.39* | +0.29 | −0.13 | −0.54 | −1.50 | −2.95 |
+| single agent | −0.02 | −0.06 | −0.23 | −0.39 | −0.80 | −1.56 |
+| deterministic only | −0.02 | −0.07 | −0.26 | −0.46 | −0.94 | −1.84 |
+| LLM + anchor | −0.02 | −0.07 | −0.26 | −0.46 | −0.94 | −1.83 |
+| sequential pipeline | −0.11 | −0.18 | −0.45 | −0.71 | −1.36 | −2.53 |
+| hierarchical | −0.20 | −0.26 | −0.52 | −0.78 | −1.41 | −2.55 |
+| debate | −0.20 | −0.28 | −0.62 | −0.95 | −1.74 | −3.08 |
 
 Table 6. TC sensitivity, frontier regime.
 
@@ -311,16 +311,16 @@ Splitting Window B at its midpoint reveals all matrix cells are unstable across 
 
 | Cell | SR (full) | SR H1 (2022) | SR H2 (2023-24) | $|\Delta|$ |
 |---|---:|---:|---:|---:|
-| `none + sequential_pipeline` | −0.03 | −1.17 | +0.91 | *2.08* |
-| `none + hierarchical` | −0.21 | −1.20 | +0.69 | *1.89* |
-| `none + ind. ensemble` | −0.37 | +0.06 | −1.40 | *1.46* |
-| `none + debate` | +0.27 | −0.55 | +0.90 | *1.45* |
-| `frontier + single_agent` | −0.23 | +0.38 | −0.67 | 1.05 |
-| `none + deterministic_only` | −0.19 | −0.60 | +0.25 | 0.85 |
-| `frontier + deterministic_only` | −0.26 | +0.08 | −0.51 | 0.58 |
-| `frontier + sequential_pipeline` | −0.44 | −0.16 | −0.62 | 0.47 |
-| `frontier + ind. ensemble` | −0.13 | −0.42 | +0.04 | 0.46 |
-| `frontier + hierarchical` | −0.52 | −0.41 | −0.62 | 0.21 |
+| none + sequential pipeline | −0.03 | −1.17 | +0.91 | *2.08* |
+| none + hierarchical | −0.21 | −1.20 | +0.69 | *1.89* |
+| none + ind. ensemble | −0.37 | +0.06 | −1.40 | *1.46* |
+| none + debate | +0.27 | −0.55 | +0.90 | *1.45* |
+| frontier + single agent | −0.23 | +0.38 | −0.67 | 1.05 |
+| none + deterministic only | −0.19 | −0.60 | +0.25 | 0.85 |
+| frontier + deterministic only | −0.26 | +0.08 | −0.51 | 0.58 |
+| frontier + sequential pipeline | −0.44 | −0.16 | −0.62 | 0.47 |
+| frontier + ind. ensemble | −0.13 | −0.42 | +0.04 | 0.46 |
+| frontier + hierarchical | −0.52 | −0.41 | −0.62 | 0.21 |
 
 Table 7. Sub-period stability across Window B halves.
 
@@ -335,8 +335,8 @@ Table 8 reports Ledoit-Wolf robust Sharpe-ratio tests on the key pairwise compar
 | Best frontier vs inverse-vol | −0.13 | +0.62 | −107 | $<10^{-4}$ | yes |
 | Best frontier vs SPY BAH | −0.13 | +0.50 | −52 | $<10^{-4}$ | yes |
 | Best matrix vs inverse-vol | +0.27 | +0.74 | −42 | $<10^{-4}$ | yes |
-| `+attention` vs `text_only` | −0.32 | −0.45 | +43 | $<10^{-4}$ | yes |
-| `+full` vs `text_only` | −0.35 | −0.45 | +28 | $<10^{-4}$ | yes |
+| + attention vs text only | −0.32 | −0.45 | +43 | $<10^{-4}$ | yes |
+| +full vs text only | −0.35 | −0.45 | +28 | $<10^{-4}$ | yes |
 | LLM-effect on debate | −0.72 | +0.27 | −21 | $<10^{-4}$ | yes |
 | Best matrix vs SPY BAH | +0.27 | +0.50 | −19 | $<10^{-4}$ | yes |
 | H1: debate-frontier vs ensemble-frontier | −0.61 | −0.13 | −12 | $<10^{-4}$ | yes |
@@ -351,12 +351,12 @@ Table 8. Pairwise Sharpe tests with HAC-adjusted variance and BH FDR control. Th
 
 | Cell | Sharpe | 95% CI |
 |---|---:|---|
-| `frontier + ind. ensemble` | −0.13 | [−1.05, +0.71] |
-| `frontier + sequential_pipeline` | −0.44 | [−1.07, +0.49] |
-| `frontier + debate` | −0.61 | [−1.38, +0.28] |
-| `none + debate` | +0.27 | [−0.59, +1.15] |
-| `none + ind. ensemble` | −0.37 | [−1.81, +0.39] |
-| `none + sequential_pipeline` | −0.03 | [−1.05, +0.93] |
+| frontier + ind. ensemble | −0.13 | [−1.05, +0.71] |
+| frontier + sequential pipeline | −0.44 | [−1.07, +0.49] |
+| frontier + debate | −0.61 | [−1.38, +0.28] |
+| none + debate | +0.27 | [−0.59, +1.15] |
+| none + ind. ensemble | −0.37 | [−1.81, +0.39] |
+| none + sequential pipeline | −0.03 | [−1.05, +0.93] |
 
 Table 9. Block-bootstrap 95% CIs for cell Sharpe (n_boot = 2,000, block = 21).
 
