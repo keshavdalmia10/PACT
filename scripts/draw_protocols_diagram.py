@@ -160,20 +160,25 @@ def draw_debate(ax):
 
 def draw_deterministic(ax):
     setup_panel(ax, "6. Deterministic anchor only (no LLM)")
-    box(ax, 5, 8.5, 6.5, 0.85, "Multi-horizon momentum  (1m · 3m · 6m · 12m)",
+    box(ax, 5, 8.7, 6.5, 1.0,
+        "Multi-horizon momentum\n(1m · 3m · 6m · 12m)",
         ANCHOR, ANCHOR_EDGE, fontsize=10)
-    box(ax, 2.5, 6.0, 4.0, 0.9, "Inverse-volatility  (EWMA λ=0.94)",
+    box(ax, 2.4, 5.7, 3.6, 1.2,
+        "Inverse-volatility\n(EWMA λ = 0.94)",
         ANCHOR, ANCHOR_EDGE, fontsize=10)
-    box(ax, 7.5, 6.0, 4.0, 0.9, "Drawdown breaker  (60-day MDD ≥ 15%)",
-        ANCHOR, ANCHOR_EDGE, fontsize=9)
-    box(ax, 5, 3.4, 4.5, 0.9, "Vol-targeted weights  (rule-based)",
+    box(ax, 7.6, 5.7, 3.6, 1.2,
+        "Drawdown breaker\n(60-day MDD ≥ 15%)",
+        ANCHOR, ANCHOR_EDGE, fontsize=10)
+    box(ax, 5, 3.0, 4.5, 1.0,
+        "Vol-targeted weights\n(rule-based)",
         PM, PM_EDGE, fontsize=10)
-    box(ax, 5, 1.3, 4.5, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=10)
-    arrow(ax, 5, 8.05, 2.5, 6.5)
-    arrow(ax, 5, 8.05, 7.5, 6.5)
-    arrow(ax, 2.5, 5.5, 5, 3.85)
-    arrow(ax, 7.5, 5.5, 5, 3.85)
-    arrow(ax, 5, 2.95, 5, 1.75)
+    box(ax, 5, 1.0, 4.5, 0.85,
+        "Per-instrument target views", PM, PM_EDGE, fontsize=10)
+    arrow(ax, 5, 8.15, 2.4, 6.35)
+    arrow(ax, 5, 8.15, 7.6, 6.35)
+    arrow(ax, 2.4, 5.05, 5, 3.55)
+    arrow(ax, 7.6, 5.05, 5, 3.55)
+    arrow(ax, 5, 2.45, 5, 1.45)
 
 
 def draw_llm_plus_anchor(ax):
