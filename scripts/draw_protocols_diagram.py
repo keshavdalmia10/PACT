@@ -77,57 +77,58 @@ def draw_single_agent(ax):
 
 def draw_independent_ensemble(ax):
     setup_panel(ax, "2. Independent ensemble (no comm)")
-    specs = ["Macro", "Narrative", "Cross-Asset", "Technical", "Fundamentals", "Risk*"]
-    xs = [1.5, 3, 4.5, 6, 7.5, 9]
+    specs = ["Macro", "Narr.", "X-Asset", "Tech", "Funds", "Risk*"]
+    xs = [1.0, 2.6, 4.2, 5.8, 7.4, 9.0]
     for x, name in zip(xs, specs):
-        box(ax, x, 7, 1.2, 0.8, name, SPECIALIST, SPECIALIST_EDGE, fontsize=7)
+        box(ax, x, 7, 1.4, 0.8, name, SPECIALIST, SPECIALIST_EDGE, fontsize=9)
     box(ax, 5, 4, 5, 1.0, "Median vote\n(direction · conviction-weighted)", ANCHOR, ANCHOR_EDGE, fontsize=8)
     box(ax, 5, 1.5, 4, 0.9, "Per-instrument target views", PM, PM_EDGE, fontsize=8)
     for x in xs:
         arrow(ax, x, 6.6, 5, 4.5)
     arrow(ax, 5, 3.5, 5, 1.95)
-    ax.text(5.6, 0.5, "*Risk=scaling input only (no direction)", fontsize=6, style="italic", ha="center")
+    ax.text(5, 0.5, "*Risk = scaling input only (no direction)", fontsize=7, style="italic", ha="center")
 
 
 def draw_sequential_pipeline(ax):
     setup_panel(ax, "3. Sequential pipeline (3 phases)")
     # Phase 1
-    box(ax, 2, 8, 1.7, 0.8, "Macro", SPECIALIST, SPECIALIST_EDGE, fontsize=7)
-    box(ax, 4, 8, 1.7, 0.8, "Narrative", SPECIALIST, SPECIALIST_EDGE, fontsize=7)
-    ax.text(0.6, 8, "Phase 1\nScreener", fontsize=7, ha="center", va="center", style="italic", color="#555")
+    box(ax, 3.2, 8, 1.6, 0.7, "Macro", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
+    box(ax, 5.4, 8, 1.6, 0.7, "Narrative", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
+    ax.text(1.4, 8, "Phase 1\nScreener", fontsize=8, ha="center", va="center", style="italic", color="#555")
     # Phase 2
-    box(ax, 2, 5.5, 1.7, 0.8, "Cross-Asset", SPECIALIST, SPECIALIST_EDGE, fontsize=7)
-    box(ax, 4, 5.5, 1.7, 0.8, "Technical", SPECIALIST, SPECIALIST_EDGE, fontsize=7)
-    box(ax, 6, 5.5, 1.7, 0.8, "Fundamentals", SPECIALIST, SPECIALIST_EDGE, fontsize=7)
-    ax.text(0.6, 5.5, "Phase 2\nDeep\nanalysis", fontsize=7, ha="center", va="center", style="italic", color="#555")
+    box(ax, 3.2, 5.5, 1.6, 0.7, "X-Asset", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
+    box(ax, 5.4, 5.5, 1.6, 0.7, "Tech", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
+    box(ax, 7.6, 5.5, 1.6, 0.7, "Funds", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
+    ax.text(1.4, 5.5, "Phase 2\nDeep\nanalysis", fontsize=8, ha="center", va="center", style="italic", color="#555")
     # Phase 3
-    box(ax, 4, 3, 1.7, 0.8, "Risk*", SPECIALIST, SPECIALIST_EDGE, fontsize=7)
-    box(ax, 6, 3, 1.7, 0.8, "PM", PM, PM_EDGE, fontsize=8)
-    ax.text(0.6, 3, "Phase 3\nRisk +\nportfolio", fontsize=7, ha="center", va="center", style="italic", color="#555")
-    box(ax, 6, 1, 4, 0.9, "Per-instrument target views", PM, PM_EDGE, fontsize=8)
-    # arrows
-    for x in [2, 4]:
-        arrow(ax, x, 7.6, x, 5.9)
-    for x in [2, 4, 6]:
-        arrow(ax, x, 5.1, 4, 3.4)
-        arrow(ax, x, 5.1, 6, 3.4)
-    arrow(ax, 4, 2.6, 6, 2.6)
-    arrow(ax, 6, 2.6, 6, 1.5)
+    box(ax, 4.2, 3, 1.6, 0.7, "Risk*", SPECIALIST, SPECIALIST_EDGE, fontsize=9)
+    box(ax, 6.4, 3, 1.6, 0.7, "PM", PM, PM_EDGE, fontsize=9)
+    ax.text(1.4, 3, "Phase 3\nRisk +\nportfolio", fontsize=8, ha="center", va="center", style="italic", color="#555")
+    box(ax, 5.3, 1, 4, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=9)
+    # arrows: P1 → P2 (single line down per upstream)
+    for x in [3.2, 5.4]:
+        arrow(ax, x, 7.65, x, 5.9)
+    # P2 → P3 (each Phase 2 agent feeds Risk + PM)
+    for x in [3.2, 5.4, 7.6]:
+        arrow(ax, x, 5.15, 4.2, 3.4)
+        arrow(ax, x, 5.15, 6.4, 3.4)
+    arrow(ax, 4.2, 2.65, 6.4, 2.65)
+    arrow(ax, 6.4, 2.65, 5.5, 1.45)
 
 
 def draw_hierarchical(ax):
     setup_panel(ax, "4. Hierarchical (manager-analyst)")
-    box(ax, 5, 8.3, 3, 1.0, "PM (manager)\nbriefs · veto", PM, PM_EDGE, fontsize=8)
-    specs = ["Macro", "Narrative", "Cross-Asset", "Technical", "Fundamentals", "Risk*"]
-    xs = [1.2, 2.8, 4.4, 6.0, 7.6, 9.2]
+    box(ax, 5, 8.3, 3, 1.0, "PM (manager)\nbriefs · veto", PM, PM_EDGE, fontsize=9)
+    specs = ["Macro", "Narr.", "X-Asset", "Tech", "Funds", "Risk*"]
+    xs = [1.0, 2.6, 4.2, 5.8, 7.4, 9.0]
     for x, name in zip(xs, specs):
-        box(ax, x, 5.3, 1.3, 0.8, name, SPECIALIST, SPECIALIST_EDGE, fontsize=7)
+        box(ax, x, 5.3, 1.4, 0.8, name, SPECIALIST, SPECIALIST_EDGE, fontsize=9)
         # bidirectional arrows
         arrow(ax, 5, 7.8, x, 5.7, color="#888", lw=0.6, style="<|-|>")
-    box(ax, 5, 2.5, 3.5, 0.9, "Confidence-veto\n(threshold 0.15)", JUDGE, JUDGE_EDGE, fontsize=7)
-    box(ax, 5, 0.7, 4, 0.9, "Per-instrument target views", PM, PM_EDGE, fontsize=8)
-    arrow(ax, 5, 4.9, 5, 3.0)
-    arrow(ax, 5, 2.1, 5, 1.2)
+    box(ax, 5, 2.7, 3.6, 0.85, "Confidence-veto\n(threshold 0.15)", JUDGE, JUDGE_EDGE, fontsize=9)
+    box(ax, 5, 0.9, 4, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=9)
+    arrow(ax, 5, 4.9, 5, 3.15)
+    arrow(ax, 5, 2.25, 5, 1.35)
 
 
 def draw_debate(ax):
@@ -145,16 +146,16 @@ def draw_debate(ax):
 
 def draw_deterministic(ax):
     setup_panel(ax, "6. Deterministic anchor only (no LLM)")
-    box(ax, 5, 8, 6, 1.0, "Multi-horizon momentum\n(1m · 3m · 6m · 12m)", ANCHOR, ANCHOR_EDGE, fontsize=8)
-    box(ax, 2.5, 5.5, 3, 0.9, "Inverse-volatility\n(EWMA λ=0.94)", ANCHOR, ANCHOR_EDGE, fontsize=7)
-    box(ax, 7.5, 5.5, 3, 0.9, "Drawdown breaker\n(60-day MDD ≥ 15%)", ANCHOR, ANCHOR_EDGE, fontsize=7)
-    box(ax, 5, 2.8, 4, 1.0, "Vol-targeted weights\n(rule-based)", PM, PM_EDGE, fontsize=8)
-    box(ax, 5, 0.7, 4, 0.7, "Per-instrument target views", PM, PM_EDGE, fontsize=7)
-    arrow(ax, 5, 7.5, 2.5, 6.0)
-    arrow(ax, 5, 7.5, 7.5, 6.0)
-    arrow(ax, 2.5, 5.0, 5, 3.4)
-    arrow(ax, 7.5, 5.0, 5, 3.4)
-    arrow(ax, 5, 2.3, 5, 1.1)
+    box(ax, 5, 8, 6, 0.9, "Multi-horizon momentum\n(1m · 3m · 6m · 12m)", ANCHOR, ANCHOR_EDGE, fontsize=9)
+    box(ax, 2.2, 5.5, 3.4, 1.0, "Inverse-volatility\n(EWMA λ=0.94)", ANCHOR, ANCHOR_EDGE, fontsize=9)
+    box(ax, 7.8, 5.5, 3.4, 1.0, "Drawdown breaker\n(60-day MDD ≥ 15%)", ANCHOR, ANCHOR_EDGE, fontsize=9)
+    box(ax, 5, 2.8, 4, 0.9, "Vol-targeted weights\n(rule-based)", PM, PM_EDGE, fontsize=9)
+    box(ax, 5, 0.9, 4, 0.85, "Per-instrument target views", PM, PM_EDGE, fontsize=9)
+    arrow(ax, 5, 7.55, 2.2, 6.0)
+    arrow(ax, 5, 7.55, 7.8, 6.0)
+    arrow(ax, 2.2, 5.0, 5, 3.25)
+    arrow(ax, 7.8, 5.0, 5, 3.25)
+    arrow(ax, 5, 2.35, 5, 1.35)
 
 
 def draw_llm_plus_anchor(ax):
